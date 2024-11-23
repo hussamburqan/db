@@ -2,29 +2,39 @@
 
 namespace App\Http\Resources;
 
-use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class AppointsmentResource extends JsonResource
+class AppointmentResource extends JsonResource
 {
-    /**
-     * Transform the resource into an array.
-     *
-     * @return array<string, mixed>
-     */
-    public function toArray(Request $request): array
+    public function toArray($request)
     {
-        return  [
-        'id'=>$this->id,    
-        'date'=>$this->date,
-        'time'=>$this->time,
-        'description'=>$this->description,
-        'status'=>$this->status,
-        'patient_id'=>$this->patient_id,
-        'nclinic_id'=>$this->nclinic_id,
-        'doctor_id'=>$this->doctor_id,
-        'user_id'=>$this->user_id
+        return [
+            'id' => $this->id,
+            'date' => $this->date,
+            'time' => $this->time,
+            'description' => $this->description,
+            'status' => $this->status,
+            'instructions' => $this->instructions,
+            'doctor' => [
+                'id' => $this->doctor->id,
+                'name' => $this->doctor->name,
+                'specialization' => $this->doctor->specialization,
+                'education' => $this->doctor->education,
+                'experience_years' => $this->doctor->experience_years,
+                'photo' => $this->doctor->photo,
+                'bio' => $this->doctor->bio
+            ],
+            'clinic' => [
+                'id' => $this->nclinic->id,
+                'name' => $this->nclinic->name,
+                'location' => $this->nclinic->location,
+            ],
+            'patient' => [
+                'id' => $this->patient->id,
+                'name' => $this->patient->user->name,
+            ],
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at
         ];
-        return parent::toArray($request);
     }
 }

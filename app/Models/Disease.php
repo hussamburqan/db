@@ -2,37 +2,28 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Diseases extends Model
+class Disease extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
-
-        'disease_classification',
-        'disease_type',
+        'name', 
+        'classification', 
+        'type', 
         'description',
-        'major_id',
-        'patient_id',
-        'doctor_id'
+        'symptoms', 
+        'treatment_protocol', 
+        'doctor_id', 
+        'reservation_id'
     ];
 
-    public function major()
-    {
-        return $this->belongsTo(Major::class);
-    }
-
-    
-    public function patient()
-    {
-        return $this->belongsTo(Patient::class);
-    }
-
-    
     public function doctor()
     {
         return $this->belongsTo(Doctor::class);
+    }
+
+    public function reservation()
+    {
+        return $this->belongsTo(Reservation::class);
     }
 }

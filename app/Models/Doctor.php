@@ -2,51 +2,38 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Doctor extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
-        'name', 
-        'age',
-        'email',
-        'gender',
-        'phone',
-        'specialization',
-        'experience',
-        'education',
-        'major_id',
-        'nclinic_id',
-        'user_id',
-        'patient_id'
+        'name',
+        'experience_years', 
+        'specialization', 
+        'education', 
+        'bio',
+        'major_id', 
+        'n_clinic_id',
+        'photo'
     ];
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function major()
+    {
+        return $this->belongsTo(Major::class);
+    }
+
+    public function nclinic()
+    {
+        return $this->belongsTo(NClinic::class, 'nclinic_id');
+    }
 
     public function appointments()
     {
         return $this->hasMany(Appointment::class);
-    }
-
-    public function resrvations()
-    {
-        return $this->hasMany(Reservation::class);
-    }
-
-    public function medications()
-    {
-        return $this->hasMany(Medication::class);
-    }
-
-    public function invoices()
-    {
-        return $this->hasMany(Invoice::class);
-    }
-
-    public function prescriptions()
-    {
-        return $this->hasMany(Prescription::class);
     }
 
     public function diseases()
@@ -54,18 +41,13 @@ class Doctor extends Model
         return $this->hasMany(Disease::class);
     }
 
-    public function majors()
+    public function reservations()
     {
-        return $this->hasMany(Major::class);
+        return $this->hasMany(Reservation::class);
     }
 
-    public function nclinics()
+    public function invoices()
     {
-        return $this->hasMany(NClinic::class);
-    }
-
-    public function patients()
-    {
-        return $this->hasMany(Patient::class);
+        return $this->hasMany(Invoice::class);
     }
 }

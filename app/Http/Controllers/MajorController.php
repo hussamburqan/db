@@ -2,69 +2,49 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Major;
 use Illuminate\Http\Request;
 
-
-use App\Http\Resources\MajorResource;
-use App\Http\Traits\MobileResponse;
-use App\Models\Major;
-use Illuminate\Support\Facades\Validator;
 class MajorController extends Controller
 {
-    use MobileResponse;
-
-    public function update(Request $request,$id)
+    public function index()
     {
-        $major = Major::find($id);
-        if(!$major){
-            return $this ->fail("not Found");
-        }
-
-
-        $major->update([
-            
-            'name' => $request->name,
-        ]);
-        return $this->success( new MajorResource($disease) );
+        $majors = Major::all();
+        return response()->json($majors);
     }
 
-    public function delete($id)
+    public function store(Request $request)
     {
-        $major = Major::find($id);
-        if($major){
-            $major->delete();
-            return $this->success("Deleted successfully");
-        } else {
-            return $this->fail("Not Found");
-        }
-    }
-
-    public function add(Request $request)
-    {
-        $validator = Validator::make($request->all(),[
-            
-            'name'=>'required|unique:majors,name',
-            //'doctor_id'=>'required|exists:doctor,id',
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'required|string',
+            'is_active' => 'boolean'
         ]);
 
-        if($validator->fails()){
-
-            return $this->fail($validator->errors()->first());
-
-        }
-
-        $major = Major::create([
-            'name'=>$request->name,
-            //'doctor_id'=>$request->doctor_id,
-            
-            
-        ]);
-        return $this->success( new MajorResource($major) );
+        $major = Major::create($validated);
+        return response()->json($major, 201);
     }
 
-    public function all()
+    public function show(Major $major)
     {
-        $major = Major::all();
-        return $this->success( MajorResource::collection($major) );
+        return response()->json($major);
+    }
+
+    public function update(Request $request, Major $major)
+    {
+        $validated = $request->validate([
+            'name' => 'string|max:255',
+            'description' => 'string',
+            'is_active' => 'boolean'
+        ]);
+
+        $major->update($validated);
+        return response()->json($major);
+    }
+
+    public function destroy(Major $major)
+    {
+        $major->delete();
+        return response()->json(null, 204);
     }
 }

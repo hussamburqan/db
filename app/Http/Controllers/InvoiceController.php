@@ -2,85 +2,126 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Resources\InvoiceResource;
-use App\Http\Traits\MobileResponse;
 use App\Models\Invoice;
-use App\Models\Doctor;
-use App\Models\Patient;
-use App\Models\User;
-use App\Models\Major;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class InvoiceController extends Controller
 {
-    use MobileResponse;
-
-    public function update(Request $request,$id)
+    public function index()
     {
-        $invoice = Invoice::find($id);
-        if(!$invoice){
-            return $this ->fail("not Found");
+        $invoices = Invoice::with(['appointment', 'patient', 'doctor', 'nclinic'])->get();
+        return response()->json($invoices);
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'invoice_number' => 'required|string|unique:invoices',
+            'amount' => 'required|numeric',
+            'payment_method' => 'required|string|in:cash,credit_card,insurance,bank_transfer',
+            'payment_status' => 'required|string|in:pending,paid,cancelled,refunded',
+            'paid_at' => 'nullable|date',
+            'notes' => 'nullable|string',
+            'appointment_id' => 'required|exists:appointments,id',
+            'patient_id' => 'required|exists:patients,id',
+            'doctor_id' => 'required|exists:doctors,id',
+            'nclinic_id' => 'required|exists:nclinics,id'
+        ]);
+
+        if (!isset($validated['invoice_number'])) {
+            $validated['invoice_number'] = 'INV-' . Str::random(10);
         }
 
+        if ($validated['payment_status'] === 'paid' && !isset($validated['paid_at'])) {
+            $validated['paid_at'] = now();
+        }
 
+        $invoice = Invoice::create($validated);
+        return response()->json($invoice->load(['appointment', 'patient', 'doctor', 'nclinic']), 201);
+    }
+
+    public function show(Invoice $invoice)
+    {
+        return response()->json($invoice->load(['appointment', 'patient', 'doctor', 'nclinic']));
+    }
+
+    public function update(Request $request, Invoice $invoice)
+    {
+        $validated = $request->validate([
+            'invoice_number' => 'string|unique:invoices,invoice_number,'.$invoice->id,
+            'amount' => 'numeric',
+            'payment_method' => 'string|in:cash,credit_card,insurance,bank_transfer',
+            'payment_status' => 'string|in:pending,paid,cancelled,refunded',
+            'paid_at' => 'nullable|date',
+            'notes' => 'nullable|string'
+        ]);
+
+        if ($validated['payment_status'] === 'paid' && !$invoice->paid_at) {
+            $validated['paid_at'] = now();
+        }
+
+        $invoice->update($validated);
+        return response()->json($invoice->load(['appointment', 'patient', 'doctor', 'nclinic']));
+    }
+
+    public function destroy(Invoice $invoice)
+    {
+        $invoice->delete();
+        return response()->json(null, 204);
+    }
+
+    public function generatePDF(Invoice $invoice)
+    {
+        // Generate PDF logic here
+        $pdf = PDF::loadView('invoices.pdf', compact('invoice'));
+        return $pdf->download('invoice-'.$invoice->invoice_number.'.pdf');
+    }
+
+    public function markAsPaid(Invoice $invoice)
+    {
         $invoice->update([
-            
-            'amount' => $request->amount,
-            'payment_method' => $request->payment_method,
-            'payment_status' => $request->payment_status,
-            'time' => $request->time,
+            'payment_status' => 'paid',
+            'paid_at' => now()
         ]);
-        return $this->success( new InvoiceResource($disease) );
+        return response()->json($invoice->load(['appointment', 'patient', 'doctor', 'nclinic']));
     }
 
-    public function delete($id)
+    public function search(Request $request)
     {
-        $invoice = Invoice::find($id);
-        if($invoice){
-            $invoice->delete();
-            return $this->success("Deleted successfully");
-        } else {
-            return $this->fail("Not Found");
-        }
-    }
+        $query = Invoice::query();
 
-    public function add(Request $request)
-    {
-        $validator = Validator::make($request->all(),[
-            'amount'=>'required',
-            'payment_method'=>'required',
-            'payment_status'=>'required',
-            'time'=>'required',
-            'doctor_id'=>'required|exists:doctor,id',
-            'patient_id'=>'required|exists:patients,id',
-            'major_id'=>'required|exists:majors,id',
-            'user_id'=>'required|exists:users,id',
-        ]);
-
-        if($validator->fails()){
-
-            return $this->fail($validator->errors()->first());
-
+        if ($request->has('invoice_number')) {
+            $query->where('invoice_number', 'like', '%'.$request->invoice_number.'%');
         }
 
-        $invoice = Invoice::create([
-            'amount'=>$request->amount,
-            'payment_method'=>$request->payment_method,
-            'payment_status'=>$request->payment_status,
-            'time'=>$request->time,
-            'major_id'=>$request->major_id,
-            'user_id'=>$request->user_id,
-            'doctor_id'=>$request->doctor_id,
-            'patient_id'=>$request->patient_id,
-            
-        ]);
-        return $this->success( new InvoiceResource($invoice) );
+        if ($request->has('status')) {
+            $query->where('payment_status', $request->status);
+        }
+
+        if ($request->has('from_date')) {
+            $query->whereDate('created_at', '>=', $request->from_date);
+        }
+
+        if ($request->has('to_date')) {
+            $query->whereDate('created_at', '<=', $request->to_date);
+        }
+
+        $invoices = $query->with(['appointment', 'patient', 'doctor', 'nclinic'])->get();
+        return response()->json($invoices);
     }
 
-    public function all()
+    public function getStatistics()
     {
-        $invoice = Invoice::all();
-        return $this->success( InvoiceResource::collection($invoice) );
+        $stats = [
+            'total_invoices' => Invoice::count(),
+            'total_paid' => Invoice::where('payment_status', 'paid')->count(),
+            'total_pending' => Invoice::where('payment_status', 'pending')->count(),
+            'total_amount' => Invoice::where('payment_status', 'paid')->sum('amount'),
+            'today_invoices' => Invoice::whereDate('created_at', today())->count(),
+            'today_amount' => Invoice::whereDate('created_at', today())->where('payment_status', 'paid')->sum('amount')
+        ];
+
+        return response()->json($stats);
     }
 }

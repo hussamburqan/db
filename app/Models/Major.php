@@ -2,20 +2,21 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Major extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
-        'name',
-        //'doctor_id'
-    ];
+        'name', 
+        'description', 'is_active'];
 
-    // public function doctor()
-    // {
-    //     return $this->belongsTo(Doctor::class);
-    // }
+    public function doctors()
+    {
+        return $this->hasMany(Doctor::class);
+    }
+
+    public function nclinics()
+    {
+        return $this->hasMany(NClinic::class);
+    }
 }

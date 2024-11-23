@@ -2,27 +2,25 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Reservation extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
-        'time',
-        'date',
-        'email',
-        'duration',
+        'date', 
+        'time', 
+        'duration_minutes', 
+        'status',
+        'reason_for_visit', 
+        'notes', 
         'patient_id',
-        'nclinic_id',
-        'doctor_id',
-        'user_id'
+        'doctor_id', 
+        'nclinic_id'
     ];
 
-    public function nclinic()
+    public function patient()
     {
-        return $this->belongsTo(NClinic::class);
+        return $this->belongsTo(Patient::class);
     }
 
     public function doctor()
@@ -30,13 +28,13 @@ class Reservation extends Model
         return $this->belongsTo(Doctor::class);
     }
 
-    public function patient()
+    public function nclinic()
     {
-        return $this->belongsTo(Patient::class);
+        return $this->belongsTo(NClinic::class);
     }
 
-    public function user()
+    public function disease()
     {
-        return $this->belongsTo(User::class);
+        return $this->hasOne(Disease::class);
     }
 }

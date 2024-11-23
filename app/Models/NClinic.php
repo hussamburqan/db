@@ -1,33 +1,47 @@
 <?php
+
 namespace App\Models;
+
 use Illuminate\Database\Eloquent\Model;
+
 class NClinic extends Model
 {    
     protected $table = 'nclinics';
-
     protected $fillable = [
         'name',
         'location',
         'description',
-        'start_date',
-        'end_date',
+        'opening_time',
+        'closing_time',
         'status',
         'email',
         'phone',
         'major_id',
-        'user_id',
-        'patient_id'
+        'photo'
     ];
+
     public function major()
     {
         return $this->belongsTo(Major::class);
     }
-    public function user()
+
+    public function doctors()
     {
-        return $this->belongsTo(User::class);
+        return $this->hasMany(Doctor::class);
     }
-    public function patient()
+
+    public function appointments()
     {
-        return $this->belongsTo(Patient::class);
+        return $this->hasMany(Appointment::class);
+    }
+
+    public function reservations()
+    {
+        return $this->hasMany(Reservation::class);
+    }
+
+    public function invoices()
+    {
+        return $this->hasMany(Invoice::class);
     }
 }

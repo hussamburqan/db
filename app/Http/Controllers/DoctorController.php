@@ -1,110 +1,122 @@
+<?php
+
 namespace App\Http\Controllers;
 
-use App\Http\Resources\DoctorResource;
-use App\Http\Traits\MobileResponse;
 use App\Models\Doctor;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
 
 class DoctorController extends Controller
 {
-    use MobileResponse;
-
-    public function one2($id)
+    private function validateDoctor(Request $request, $isUpdate = false)
     {
-        $doctor = Doctor::find($id);
-        if (!$doctor) {
-            return $this->fail("Doctor not found");
-        }
-        return $this->success(new DoctorResource($doctor));
-    }
-
-    public function one(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'id' => 'required|exists:doctors,id'
-        ]);
-
-        if ($validator->fails()) {
-            return $this->fail($validator->errors()->first());
-        }
-
-        $doctor = Doctor::find($request->id);
-        return $this->success(new DoctorResource($doctor));
-    }
-
-    public function update(Request $request, $id)
-    {
-        $doctor = Doctor::find($id);
-        if (!$doctor) {
-            return $this->fail("Doctor not found");
-        }
-
-        $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|required|string',
-            'age' => 'sometimes|required|integer',
-            'email' => 'sometimes|required|email|unique:doctors,email,'.$id,
-            'gender' => 'sometimes|required|in:male,female',
-            'phone' => 'sometimes|required|unique:doctors,phone,'.$id,
-            'specialization' => 'sometimes|required|string',
-            'experience' => 'sometimes|required|integer',
-            'education' => 'sometimes|required|string',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->fail($validator->errors()->first());
-        }
-
-        $doctor->update($request->only([
-            'name', 'age', 'email', 'gender', 
-            'phone', 'specialization', 'experience', 'education'
-        ]));
-
-        return $this->success(new DoctorResource($doctor));
-    }
-
-    public function delete($id)
-    {
-        $doctor = Doctor::find($id);
-        if ($doctor) {
-            $doctor->delete();
-            return $this->success("Deleted successfully");
-        }
-        return $this->fail("Doctor not found");
-    }
-
-    public function add(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
+        $rules = [
             'name' => 'required|string',
-            'age' => 'required|integer',
-            'email' => 'required|email|unique:doctors,email',
-            'gender' => 'required|in:male,female',
-            'phone' => 'required|unique:doctors,phone',
+            'experience_years' => 'required|integer|min:0',
             'specialization' => 'required|string',
-            'experience' => 'required|integer',
             'education' => 'required|string',
-            'user_id' => 'required|exists:users,id',
-            'nclinic_id' => 'required|exists:nclinics,id',
+            'bio' => 'required|string',
             'major_id' => 'required|exists:majors,id',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->fail($validator->errors()->first());
-        }
-
-        $doctor = Doctor::create($request->only([
-            'name', 'age', 'email', 'gender', 'phone',
-            'specialization', 'experience', 'education',
-            'user_id', 'nclinic_id', 'major_id'
-        ]));
-
-        return $this->success(new DoctorResource($doctor));
+            'n_clinic_id' => 'required|exists:nclinics,id',
+            'photo' => $isUpdate ? 'nullable|image|mimes:jpeg,png,jpg|max:2048' : 'required|image|mimes:jpeg,png,jpg|max:2048'
+        ];
+        
+        return $request->validate($rules);
     }
 
-    public function all()
+    public function index()
     {
-        $doctors = Doctor::all();
-        return $this->success(DoctorResource::collection($doctors));
+        try {
+            $doctors = Doctor::with(['user', 'major', 'nclinic'])->paginate(10);
+            return response()->json(['status' => true, 'data' => $doctors]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
     }
+
+    public function store(Request $request)
+    {
+        try {
+            $validated = $this->validateDoctor($request);
+            
+            if ($request->hasFile('photo')) {
+                $photoPath = $request->file('photo')->store('doctors', 'public');
+                $validated['photo'] = $photoPath;
+            }
+
+            $doctor = Doctor::create($validated);
+            
+            return response()->json([
+                'status' => true,
+                'message' => 'Doctor created successfully',
+                'data' => $doctor
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function show(Doctor $doctor)
+    {
+        return response()->json([
+            'status' => true, 
+            'data' => $doctor->load(['user', 'major', 'nclinic', 'appointments'])
+        ]);
+    }
+
+    public function update(Request $request, Doctor $doctor)
+    {
+        try {
+            $validated = $this->validateDoctor($request, true);
+            
+            if ($request->hasFile('photo')) {
+                // Delete old photo
+                if ($doctor->photo) {
+                    Storage::disk('public')->delete($doctor->photo);
+                }
+                
+                $photoPath = $request->file('photo')->store('doctors', 'public');
+                $validated['photo'] = $photoPath;
+            }
+
+            $doctor->update($validated);
+            
+            return response()->json([
+                'status' => true,
+                'message' => 'Doctor updated successfully',
+                'data' => $doctor
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+   
+    public function destroy(Doctor $doctor)
+    {
+        try {
+            if ($doctor->photo) {
+                Storage::disk('public')->delete($doctor->photo);
+            }
+            
+            $doctor->delete();
+            
+            return response()->json([
+                'status' => true,
+                'message' => 'Doctor deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
 }

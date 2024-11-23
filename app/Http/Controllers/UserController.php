@@ -1,146 +1,248 @@
 <?php
-// app/Http/Controllers/UserController.php
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Http\Resources\UserResource;
-use App\Http\Traits\MobileResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth;
 
 class UserController extends Controller
 {
-    use MobileResponse;
+    private function validateUser(Request $request, $isUpdate = false)
+    {
+        $rules = [
+            'name' => 'required|string|max:255',
+            'email' => $isUpdate ? 'required|email|unique:users,email,' . $request->user->id : 'required|email|unique:users',
+            'password' => $isUpdate ? 'nullable|min:8|confirmed' : 'required|min:8|confirmed',
+            'address' => 'required|string',
+            'age' => 'required|integer|between:1,120',
+            'blood_type' => 'required|in:A+,A-,B+,B-,AB+,AB-,O+,O-',
+            'gender' => 'required|in:male,female,other',
+            'phone' => 'required|string|regex:/^([0-9\s\-\+\(\)]*)$/|min:10',
+        ];
+
+        return $request->validate($rules);
+    }
 
     public function register(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8',
-            'address' => 'required|string',
-            'age' => 'required|integer',
-            'gender' => 'required|string|in:male,female',
-            'blood_type' => 'required|string|in:A+,A-,B+,B-,O+,O-,AB+,AB-',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->fail($validator->errors()->first());
+        try {
+            $validated = $this->validateUser($request);
+            $validated['password'] = Hash::make($validated['password']);
+            $user = User::create($validated);
+    
+            $token = $user->createToken('auth_token')->plainTextToken;
+    
+            return response()->json([
+                'status' => true,
+                'message' => 'Registration successful',
+                'data' => $user,
+                'access_token' => $token,
+                'token_type' => 'Bearer'
+            ], 201);
+    
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Validation Error:', $e->errors()); // Log errors
+            return response()->json([
+                'status' => false,
+                'message' => 'Validation error',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Exception:', ['error' => $e->getMessage()]);
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
         }
-
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'address' => $request->address,
-            'age' => $request->age,
-            'gender' => $request->gender,
-            'blood_type' => $request->blood_type,
-        ]);
-
-        return $this->success(new UserResource($user));
     }
+
 
     public function login(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|email',
-            'password' => 'required|string',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->fail($validator->errors()->first());
+        try {
+            $validated = $request->validate([
+                'email' => 'required|email',
+                'password' => 'required'
+            ]);
+    
+            if (!Auth::attempt($validated)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid credentials'
+                ], 401);
+            }
+    
+            $user = User::where('email', $validated['email'])->first();
+    
+            $user->load('patient'); 
+    
+            $token = $user->createToken('auth_token')->plainTextToken;
+    
+            return response()->json([
+                'status' => true,
+                'message' => 'Login successful',
+                'data' => $user,
+                'access_token' => $token,
+                'token_type' => 'Bearer'
+            ]);
+    
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
         }
+    }
+    
 
-        if (!Auth::attempt($request->only('email', 'password'))) {
-            return $this->fail('Invalid credentials', 401);
+    public function logout()
+    {
+        try {
+            auth()->user()->tokens()->delete();
+            return response()->json([
+                'status' => true,
+                'message' => 'Successfully logged out'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
         }
-
-        $user = Auth::user();
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        return $this->success([
-            'user' => new UserResource($user),
-            'token' => $token
-        ]);
     }
 
-    public function logout(Request $request)
+    public function profile()
     {
-        $request->user()->currentAccessToken()->delete();
-        return $this->success('Logged out successfully');
+        try {
+            $user = auth()->user()->load(['doctor', 'patient']);
+            return response()->json([
+                'status' => true,
+                'data' => $user
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
-    public function all()
+    public function index()
     {
-        $users = User::all();
-        return $this->success(UserResource::collection($users));
+        try {
+            $users = User::with(['doctor', 'patient'])->paginate(10);
+            return response()->json([
+                'status' => true,
+                'data' => $users
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
-    public function show($id)
+    public function show(User $user)
     {
-        $user = User::find($id);
-        if (!$user) {
-            return $this->fail('User not found', 404);
+        try {
+            return response()->json([
+                'status' => true,
+                'data' => $user->load(['doctor', 'patient'])
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
         }
-        return $this->success(new UserResource($user));
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $request, User $user)
     {
-        $user = User::find($id);
-        if (!$user) {
-            return $this->fail('User not found', 404);
+        try {
+            $validated = $this->validateUser($request, true);
+            if (isset($validated['password'])) {
+                $validated['password'] = Hash::make($validated['password']);
+            }
+            $user->update($validated);
+            return response()->json([
+                'status' => true,
+                'data' => $user
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Validation error',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
         }
-
-        $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|string|email|max:255|unique:users,email,' . $id,
-            'password' => 'sometimes|string|min:8',
-            'address' => 'sometimes|string',
-            'age' => 'sometimes|integer',
-            'gender' => 'sometimes|string|in:male,female',
-            'blood_type' => 'sometimes|string|in:A+,A-,B+,B-,O+,O-,AB+,AB-',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->fail($validator->errors()->first());
-        }
-
-        $updateData = array_filter([
-            'name' => $request->name,
-            'email' => $request->email,
-            'address' => $request->address,
-            'age' => $request->age,
-            'gender' => $request->gender,
-            'blood_type' => $request->blood_type,
-        ]);
-
-        if ($request->password) {
-            $updateData['password'] = Hash::make($request->password);
-        }
-
-        $user->update($updateData);
-
-        return $this->success(new UserResource($user));
     }
 
-    public function delete($id)
+    public function destroy(User $user)
     {
-        $user = User::find($id);
-        if (!$user) {
-            return $this->fail('User not found', 404);
+        try {
+            $user->delete();
+            return response()->json([
+                'status' => true,
+                'message' => 'User deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
         }
-
-        $user->delete();
-        return $this->success('User deleted successfully');
     }
 
-    public function profile(Request $request)
+    public function updatePassword(Request $request)
     {
-        return $this->success(new UserResource($request->user()));
+        try {
+            $validated = $request->validate([
+                'current_password' => 'required',
+                'password' => 'required|min:8|confirmed'
+            ]);
+
+            $user = auth()->user();
+
+            if (!Hash::check($validated['current_password'], $user->password)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Current password is incorrect'
+                ], 401);
+            }
+
+            $user->update([
+                'password' => Hash::make($validated['password'])
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Password updated successfully'
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Validation error',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 }
+
+
+

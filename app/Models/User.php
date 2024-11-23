@@ -1,16 +1,14 @@
 <?php
-// app/Models/User.php
 
 namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, Notifiable;
 
     protected $fillable = [
         'name',
@@ -19,11 +17,23 @@ class User extends Authenticatable
         'address',
         'age',
         'blood_type',
-        'gender'
+        'gender',
+        'phone'
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
     ];
+
+    public function doctor()
+    {
+        return $this->hasOne(Doctor::class);
+    }
+
+    public function patient()
+{
+    return $this->hasOne(Patient::class, 'user_id');
+}
+
 }

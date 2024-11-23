@@ -2,154 +2,88 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Resources\ReservationResource;
-use App\Http\Traits\MobileResponse;
 use App\Models\Reservation;
-use App\Models\Doctor;
-use App\Models\NClinic;
-use App\Models\Patient;
-use App\Models\User;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
 
 class ReservationController extends Controller
 {
-    //
-    use MobileResponse;
-
-    public function update(Request $request,$id)
+    private function validateReservation(Request $request)
     {
-        $reservation = Reservation::find($id);
-        if(!$reservation){
-            return $this ->fail("not Found", 404);
-        }
-
-
-        $reservation->update([
-            
-            'time' => $request->time,
-            'date' => $request->date,
-            'email' => $request->email,
-            'duration' => $request->duration,
-
-        ]);
-        return $this->success( new ReservationResource($reservation) );
-    }
-
-    public function delete($id)
-    {
-        $reservation = Reservation::find($id);
-        if($reservation){
-            $reservation->delete();
-            return $this->success("Deleted successfully");
-        } else {
-            return $this->fail("Not Found");
-        }
-    }
-
-    public function add(Request $request)
-    {
-        $validator = Validator::make($request->all(),[
-            'time'=>'required',
-            'date'=>'required',
-            'email'=>'required',
-            'duration'=>'required',
-            'patient_id'=>'required|exists:patients,id',
-            'doctor_id'=>'required|exists:doctors,id',
-            'nclinic_id'=>'required|exists:nclinics,id',
-            'user_id'=>'required|exists:users,id',
-        ]);
-
-        if($validator->fails()){
-
-            return $this->fail($validator->errors()->first());
-
-        }
-
-        $reservation = Reservation::create([
-            'time'=>$request->time,
-            'date'=>$request->date,
-            'email'=>$request->email,
-            'duration'=>$request->duration,
-            'doctor_id'=>$request->doctor_id,
-            'patient_id'=>$request->patient_id,
-            'nclinic_id'=>$request->nclinic_id,
-            'user_id'=>$request->user_id,
-            
-        ]);
-        return $this->success( new ReservationResource($reservation) );
-    }
-
-}
-
-/*
-    <?php
-
-namespace App\Http\Controllers;
-
-use App\Http\Resources\ReservationResource;
-use App\Http\Traits\MobileResponse;
-use App\Models\Reservation;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Http\Request;
-
-class ReservationController extends Controller
-{
-    use MobileResponse;
-
-    public function update(Request $request, $id)
-    {
-        $reservation = Reservation::find($id);
-        if (!$reservation) {
-            return $this->fail("Not Found", 404);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'time' => 'sometimes|required',
-            'date' => 'sometimes|required',
-            'email' => 'sometimes|required|email',
-            'duration' => 'sometimes|required|integer'
-        ]);
-
-        if ($validator->fails()) {
-            return $this->fail($validator->errors()->first(), 400);
-        }
-
-        $reservation->update($request->only(['time', 'date', 'email', 'duration']));
-        return $this->success(new ReservationResource($reservation));
-    }
-
-    public function delete($id)
-    {
-        $reservation = Reservation::find($id);
-        if ($reservation) {
-            $reservation->delete();
-            return $this->success("Deleted successfully");
-        } else {
-            return $this->fail("Not Found", 404);
-        }
-    }
-
-    public function add(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'time' => 'required',
-            'date' => 'required',
-            'email' => 'required|email',
-            'duration' => 'required|integer',
+        return $request->validate([
+            'date' => 'required|date|after:today',
+            'time' => ['required', 'date_format:H:i', function($attribute, $value, $fail) use ($request) {
+                if ($request->filled('doctor_id') && $request->filled('date')) {
+                    $existingReservation = Reservation::where('doctor_id', $request->doctor_id)
+                        ->where('date', $request->date)
+                        ->where('time', $value)
+                        ->where('id', '!=', $request->reservation->id ?? null)
+                        ->exists();
+                    
+                    if ($existingReservation) {
+                        $fail('Doctor is not available at this time.');
+                    }
+                }
+            }],
+            'duration_minutes' => 'required|integer|min:15|max:180',
+            'status' => 'required|in:pending,confirmed,cancelled',
+            'reason_for_visit' => 'required|string',
+            'notes' => 'nullable|string',
             'patient_id' => 'required|exists:patients,id',
             'doctor_id' => 'required|exists:doctors,id',
-            'nclinic_id' => 'required|exists:nclinics,id',
-            'user_id' => 'required|exists:users,id',
+            'nclinic_id' => 'required|exists:nclinics,id'
         ]);
+    }
 
-        if ($validator->fails()) {
-            return $this->fail($validator->errors()->first(), 400);
+    public function index()
+    {
+        try {
+            $reservations = Reservation::with(['patient.user', 'doctor.user', 'nclinic'])
+                ->orderBy('date')
+                ->orderBy('time')
+                ->paginate(10);
+            return response()->json(['status' => true, 'data' => $reservations]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
         }
+    }
 
-        $reservation = Reservation::create($request->only(['time', 'date', 'email', 'duration', 'doctor_id', 'patient_id', 'nclinic_id', 'user_id']));
-        return $this->success(new ReservationResource($reservation));
+    public function store(Request $request)
+    {
+        try {
+            $validated = $this->validateReservation($request);
+            $reservation = Reservation::create($validated);
+            return response()->json(['status' => true, 'data' => $reservation], 201);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function show(Reservation $reservation)
+    {
+        return response()->json([
+            'status' => true,
+            'data' => $reservation->load(['patient.user', 'doctor.user', 'nclinic', 'disease'])
+        ]);
+    }
+
+    public function update(Request $request, Reservation $reservation)
+    {
+        try {
+            $validated = $this->validateReservation($request);
+            $reservation->update($validated);
+            return response()->json(['status' => true, 'data' => $reservation]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function destroy(Reservation $reservation)
+    {
+        try {
+            $reservation->delete();
+            return response()->json(['status' => true, 'message' => 'Reservation deleted']);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
     }
 }
-
-*/

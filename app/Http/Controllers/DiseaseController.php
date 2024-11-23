@@ -2,151 +2,73 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Resources\DiseaseResource;
-use App\Http\Traits\MobileResponse;
-use App\Models\Disease;
-use App\Models\Doctor;
-use App\Models\Patient;
-use App\Models\Major;
-use Illuminate\Support\Facades\Validator;
+use App\Models\Invoice;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class DiseaseController extends Controller
 {
-
-    use MobileResponse;
-
-    public function update(Request $request, $id)
+    private function validateDisease(Request $request)
     {
-        $disease = Disease::find($id);
-        if(!$disease){
-            return $this->fail("Not Found");
-        }
-
-        $disease->update([
-            'disease_classification' => $request->disease_classification,
-            'disease_type' => $request->disease_type,
-            'description' => $request->description,
-        ]);
-
-        return $this->success(new DiseaseResource($disease));
-    }
-
-    public function delete($id)
-    {
-        $disease = Disease::find($id);
-        if($disease){
-            $disease->delete();
-            return $this->success("Deleted successfully");
-        } else {
-            return $this->fail("Not Found");
-        }
-    }
-
-    public function add(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'disease_classification' => 'required',
-            'disease_type' => 'required',
-            'description' => 'required',
+        return $request->validate([
+            'name' => 'required|string|max:255',
+            'classification' => 'required|string',
+            'type' => 'required|string',
+            'description' => 'required|string',
+            'symptoms' => 'required|string',
+            'treatment_protocol' => 'required|string',
             'doctor_id' => 'required|exists:doctors,id',
-            'patient_id' => 'required|exists:patients,id',
-            'major_id' => 'required|exists:majors,id',
+            'reservation_id' => 'required|exists:reservations,id'
         ]);
-
-        if($validator->fails()){
-            return $this->fail($validator->errors()->first());
-        }
-
-        $disease = Disease::create([
-            'disease_classification' => $request->disease_classification,
-            'disease_type' => $request->disease_type,
-            'description' => $request->description,
-            'doctor_id' => $request->doctor_id,
-            'patient_id' => $request->patient_id,
-            'major_id' => $request->major_id,
-        ]);
-
-        return $this->success(new DiseaseResource($disease));
     }
 
-    public function all()
+    public function index()
     {
-        $diseases = Disease::all();
-        return $this->success(DiseaseResource::collection($diseases));
+        try {
+            $diseases = Disease::with(['doctor.user', 'reservation'])->paginate(10);
+            return response()->json(['status' => true, 'data' => $diseases]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function store(Request $request)
+    {
+        try {
+            $validated = $this->validateDisease($request);
+            $disease = Disease::create($validated);
+            return response()->json(['status' => true, 'data' => $disease], 201);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function show(Disease $disease)
+    {
+        return response()->json([
+            'status' => true,
+            'data' => $disease->load(['doctor.user', 'reservation.patient'])
+        ]);
+    }
+
+    public function update(Request $request, Disease $disease)
+    {
+        try {
+            $validated = $this->validateDisease($request);
+            $disease->update($validated);
+            return response()->json(['status' => true, 'data' => $disease]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function destroy(Disease $disease)
+    {
+        try {
+            $disease->delete();
+            return response()->json(['status' => true, 'message' => 'Disease deleted']);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
     }
 }
-
-/*
-
-*/
-
-///////////////////////////////
-///////////////////////////////
-///////////////////////////////
-///////////////////////////////
-///////////////////////////////
-
-/*
-public function update(Request $request,$id)
-    {
-        $disease = Disease::find($id);
-        if(!$disease){
-            return $this ->fail("not Found");
-        }
-
-
-        $disease->update([
-            'disease_classification' => $request->disease_classification,
-            'disease_type' => $request->disease_type,
-            'description' => $request->description,
-        ]);
-        return $this->success( new DiseaseResource($disease) );
-    }
-
-    public function delete($id)
-    {
-        $disease = Disease::find($id);
-        if($disease){
-            $disease->delete();
-            return $this->success("Deleted successfully");
-        } else {
-            return $this->fail("Not Found");
-        }
-    }
-
-    public function add(Request $request)
-    {
-        $validator = Validator::make($request->all(),[
-            'disease_classification'=>'required',
-            'disease_type'=>'required',
-            'description'=>'required',
-            'doctor_id'=>'required|exists:doctors,id',
-            'patient_id'=>'required|exists:patients,id',
-            'major_id'=>'required|exists:majors,id',
-        ]);
-
-        if($validator->fails()){
-
-            return $this->fail($validator->errors()->first());
-
-        }
-
-        $disease = Disease::create([
-            'disease_classification'=>$request->disease_classification,
-            'disease_type'=>$request->disease_type,
-            'description'=>$request->description,
-            'major_id'=>$request->major_id,
-            'doctor_id'=>$request->doctor_id,
-            'patient_id'=>$request->patient_id,
-            
-        ]);
-        return $this->success( new DiseaseResource($disease) );
-    }
-
-    public function all()
-    {
-        $disease = Disease::all();
-        return $this->success( DiseaseResource::collection($appointment) );
-    }
-*/

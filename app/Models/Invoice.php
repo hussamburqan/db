@@ -2,23 +2,32 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Invoice extends Model
 {
-    use HasFactory;
     protected $fillable = [
-
-        'amount',
-        'payment_method',
+        'invoice_number', 
+        'amount', 
+        'payment_method', 
         'payment_status',
-        'time',
-        'user_id',   
-        'patient_id',   
-        'doctor_id',   
-        'nclinic_id'   
+        'paid_at', 
+        'notes', 
+        'appointment_id', 
+        'patient_id',
+        'doctor_id', 
+        'nclinic_id'
     ];
+
+    public function appointment()
+    {
+        return $this->belongsTo(Appointment::class);
+    }
+
+    public function patient()
+    {
+        return $this->belongsTo(Patient::class);
+    }
 
     public function doctor()
     {
@@ -28,15 +37,5 @@ class Invoice extends Model
     public function nclinic()
     {
         return $this->belongsTo(NClinic::class);
-    }
-
-    public function patient()
-    {
-        return $this->belongsTo(Patient::class);
-    }
-
-    public function users()
-    {
-        return $this->belongsTo(User::class);
     }
 }

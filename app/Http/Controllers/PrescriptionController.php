@@ -80,6 +80,6 @@ class PrescriptionController extends Controller
     public function all()
     {
         $prescriptions = Prescription::all();
-        return $this->success( PriscriptionResource::collection($prescription) );
+        return $this->success(PrescriptionResource::collection($prescriptions));
     }
 }

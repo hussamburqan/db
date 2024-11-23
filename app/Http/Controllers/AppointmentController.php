@@ -2,184 +2,166 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Resources\AppointmentResource;
-use App\Http\Traits\MobileResponse;
 use App\Models\Appointment;
-use App\Models\User;
-use App\Models\Major;
-use App\Models\Patient;
-use App\Models\NClinic;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
-use App\Rules\ValidateTime;
+use App\Http\Resources\AppointmentResource;
 
 class AppointmentController extends Controller
 {
-    use MobileResponse;
-
-    public function update(Request $request, $id)
+    private function validateAppointment(Request $request)
     {
-        $appointment = Appointment::find($id);
-        if (!$appointment) {
-            return $this->fail("Not Found", 404);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'date' => 'required|date',
-            'time' => ['required', new ValidateTime],
+        return $request->validate([
+            'date' => 'required|date|after:today',
+            'time' => ['required', 'date_format:H:i', function($attribute, $value, $fail) use ($request) {
+                // Check if doctor is available at this time
+                if ($request->filled('doctor_id') && $request->filled('date')) {
+                    $existingAppointment = Appointment::where('doctor_id', $request->doctor_id)
+                        ->where('date', $request->date)
+                        ->where('time', $value)
+                        ->where('id', '!=', $request->appointment->id ?? null)
+                        ->exists();
+                    
+                    if ($existingAppointment) {
+                        $fail('Doctor is not available at this time.');
+                    }
+                }
+            }],
             'description' => 'required|string',
-            'status' => 'required|string',
-            'user_id' => 'required|integer|exists:users,id',
-            'nclinic_id' => 'required|integer|exists:nclinics,id',
-            'patient_id' => 'required|integer|exists:patients,id',
-            'major_id' => 'required|integer|exists:majors,id',
+            'status' => 'required|in:scheduled,completed,cancelled,no_show',
+            'instructions' => 'required|string',
+            'patient_id' => 'required|exists:patients,id',
+            'doctor_id' => 'required|exists:doctors,id',
+            'nclinic_id' => 'required|exists:nclinics,id'
         ]);
-
-        if ($validator->fails()) {
-            return $this->fail($validator->errors()->first());
-        }
-
-        $appointment->update($request->only([
-            'date',
-            'time',
-            'description',
-            'status',
-            'user_id',
-            'major_id',
-            'nclinic_id',
-            'patient_id',
-        ]));
-
-        return $this->success(new AppointmentResource($appointment));
     }
 
-    public function delete($id)
+    public function index()
     {
-        $appointment = Appointment::find($id);
-        if ($appointment) {
-            $appointment->delete();
-            return $this->success("Deleted successfully");
-        } else {
-            return $this->fail("Not Found", 404);
+        try {
+            $appointments = Appointment::with(['doctor', 'patient.user', 'nclinic'])
+                ->paginate(10);
+                
+            return response()->json([
+                'status' => true,
+                'data' => AppointmentResource::collection($appointments)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false, 
+                'message' => $e->getMessage()
+            ], 500);
         }
     }
+    
 
-    public function add(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'date' => 'required|date',
-            'time' => ['required', new ValidateTime],
-            'description' => 'required|string',
-            'status' => 'required|string',
-            'user_id' => 'required|integer|exists:users,id',
-            'nclinic_id' => 'required|integer|exists:nclinics,id',
-            'patient_id' => 'required|integer|exists:patients,id',
-            'major_id' => 'required|integer|exists:majors,id',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->fail($validator->errors()->first());
-        }
-
-        $appointment = Appointment::create([
-            'date' => $request->date,
-            'time' => $request->time,
-            'description' => $request->description,
-            'status' => $request->status,
-            'user_id' => $request->user_id,
-            'major_id' => $request->major_id,
-            'nclinic_id' => $request->nclinic_id,
-            'patient_id' => $request->patient_id,
-        ]);
-
-        return $this->success(new AppointmentResource($appointment));
-    }
-
-    public function all()
-    {
-        $appointments = Appointment::all();
-        return $this->success(AppointmentResource::collection($appointments));
-    }
-}
-
-/*
-<?php
-
-namespace App\Http\Controllers;
-
-use App\Http\Resources\AppointmentResource;
-use App\Http\Traits\MobileResponse;
-use App\Models\Appointment;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Http\Request;
-
-class AppointmentController extends Controller
+    public function store(Request $request)
 {
-    public function update(Request $request,$id)
-    {
-        $appointment = Appointment::find($id);
-        if(!$appointment){
-            return $this ->fail("not Found");
+    try {
+        // التحقق من صحة البيانات
+        $validated = $this->validateAppointment($request);
+
+        // جلب وقت فتح وإغلاق العيادة
+        $nclinic = \App\Models\NClinic::find($request->nclinic_id);
+
+        if (!$nclinic) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Clinic not found',
+            ], 404);
         }
 
+        // تحويل وقت الفتح والإغلاق إلى كائنات وقت
+        $openingTime = \Carbon\Carbon::createFromFormat('H:i:s', $nclinic->opening_time);
+        $closingTime = \Carbon\Carbon::createFromFormat('H:i:s', $nclinic->closing_time);
+        $appointmentTime = \Carbon\Carbon::createFromFormat('H:i', $request->time);
 
-        $appointment->update([
-            'date' => $request->date,
-            'time' => $request->time,
-            'description' => $request->description,
-            'status' => $request->status,
-        ]);
-        return $this->success( new AppointmentResource($appointment) );
-    }
-
-    public function delete($id)
-    {
-        $appointment = Appointment::find($id);
-        if($appointment){
-            $appointment->delete();
-            return $this->success("Deleted successfully");
-        } else {
-            return $this->fail("Not Found");
-        }
-    }
-
-    public function add(Request $request)
-    {
-        $validator = Validator::make($request->all(),[
-            'date'=>'required',
-            'time'=>'required',
-            'description'=>'required',
-            'status'=>'required',
-            'user_id'=>'required|exists:users,id',
-            'nclinic_id'=>'required|exists:nclinics,id',
-            'patient_id'=>'required|exists:patients,id',
-            'major_id'=>'required|exists:majors,id',
-        ]);
-
-        if($validator->fails()){
-
-            return $this->fail($validator->errors()->first());
-
+        // التحقق من أن وقت الموعد ضمن ساعات العمل
+        if ($appointmentTime->lt($openingTime) || $appointmentTime->gt($closingTime)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Appointment time must be within clinic working hours (' . $nclinic->opening_time . ' - ' . $nclinic->closing_time . ')',
+            ], 422);
         }
 
-        $appointment = Appointment::create([
-            'date'=>$request->date,
-            'time'=>$request->time,
-            'description'=>$request->description,
-            'status'=>$request->status,
-            'user_id'=>$request->user_id,
-            'major_id'=>$request->major_id,
-            'nclinic_id'=>$request->nclinic_id,
-            'patient_id'=>$request->patient_id,
-            
-        ]);
-        return $this->success( new AppointmentResource($appointment) );
-    }
+        // إنشاء الموعد
+        $appointment = Appointment::create($validated);
 
-    public function all()
-    {
-        $appointments = Appointment::all();
-        return $this->success( AppointmentResource::collection($appointment) );
+        return response()->json([
+            'status' => true,
+            'data' => new AppointmentResource($appointment->load(['doctor', 'patient.user', 'nclinic']))
+        ], 201);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'status' => false,
+            'message' => $e->errors(),
+        ], 422);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => $e->getMessage(),
+        ], 500);
     }
 }
-*/
+
+
+    public function show(Appointment $appointment)
+    {
+        try {
+            return response()->json([
+                'status' => true,
+                'data' => new AppointmentResource($appointment->load(['doctor', 'patient.user', 'nclinic']))
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function update(Request $request, Appointment $appointment)
+    {
+        try {
+            $validated = $this->validateAppointment($request);
+            $appointment->update($validated);
+            return response()->json(['status' => true, 'data' => $appointment]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function destroy(Appointment $appointment)
+    {
+        try {
+            if ($appointment->status === 'completed') {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Cannot delete completed appointment'
+                ], 422);
+            }
+            $appointment->delete();
+            return response()->json(['status' => true, 'message' => 'Appointment deleted']);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function getDoctorSchedule(Request $request)
+    {
+        try {
+            $request->validate([
+                'doctor_id' => 'required|exists:doctors,id',
+                'date' => 'required|date'
+            ]);
+
+            $schedule = Appointment::where('doctor_id', $request->doctor_id)
+                ->where('date', $request->date)
+                ->orderBy('time')
+                ->get(['time', 'status']);
+
+            return response()->json(['status' => true, 'data' => $schedule]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+}
