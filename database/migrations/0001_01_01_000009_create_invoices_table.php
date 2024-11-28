@@ -10,17 +10,19 @@ return new class extends Migration
     {
         Schema::create('invoices', function (Blueprint $table) {
             $table->id();
+            $table->unsignedBigInteger('patient_archive_id');
             $table->string('invoice_number')->unique();
             $table->decimal('amount', 10, 2);
             $table->string('payment_method');
             $table->string('payment_status');
             $table->timestamp('paid_at')->nullable();
             $table->text('notes')->nullable();
-            $table->foreignId('appointment_id')->constrained()->onDelete('cascade');
-            $table->foreignId('patient_id')->constrained()->onDelete('cascade');
-            $table->foreignId('doctor_id')->constrained()->onDelete('cascade');
             $table->foreignId('nclinic_id')->constrained()->onDelete('cascade');
             $table->timestamps();
+            $table->foreign('patient_archive_id')
+            ->references('id')
+            ->on('patient_archives')
+            ->onDelete('cascade'); 
         });
     }
 

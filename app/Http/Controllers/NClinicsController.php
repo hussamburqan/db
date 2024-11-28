@@ -5,89 +5,135 @@ namespace App\Http\Controllers;
 use App\Models\NClinic;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use App\Http\Resources\ClinicResource;
 
 class NClinicsController extends Controller
 {
     private function validateClinic(Request $request, $isUpdate = false)
     {
-        $rules = [
-            'name' => 'required|string|max:255',
+        return $request->validate([
             'location' => 'required|string',
+            'photo' => $isUpdate ? 'nullable|image|mimes:jpeg,png,jpg|max:2048' : 'required|image|mimes:jpeg,png,jpg|max:2048',
+            'cover_photo' => $isUpdate ? 'nullable|image|mimes:jpeg,png,jpg|max:2048' : 'required|image|mimes:jpeg,png,jpg|max:2048',
             'description' => 'required|string',
             'opening_time' => ['required', 'date_format:H:i', function($attribute, $value, $fail) use ($request) {
                 if ($request->filled('closing_time') && $value >= $request->closing_time) {
-                    $fail('Opening time must be before closing time.');
+                    $fail('وقت الفتح يجب أن يكون قبل وقت الإغلاق');
                 }
             }],
             'closing_time' => ['required', 'date_format:H:i', function($attribute, $value, $fail) use ($request) {
                 if ($request->filled('opening_time') && $value <= $request->opening_time) {
-                    $fail('Closing time must be after opening time.');
+                    $fail('وقت الإغلاق يجب أن يكون بعد وقت الفتح');
                 }
             }],
-            'status' => 'required|in:active,inactive,maintenance',
-            'email' => 'required|email',
-            'phone' => [
-                'required',
-                'string',
-                'regex:/^([0-9\s\-\+\(\)]*)$/',
-                'min:10'
-            ],
-            'major_id' => 'required|exists:majors,id',
-            'photo' => $isUpdate ? 'nullable|image|mimes:jpeg,png,jpg|max:2048' : 'required|image|mimes:jpeg,png,jpg|max:2048'
-
-        ];
-
-        return $request->validate($rules);
+            'user_id' => $isUpdate ? 'exists:users,id' : 'required|exists:users,id|unique:nclinics',
+            'major_id' => 'required|exists:majors,id'
+        ]);
     }
 
-    public function index()
-    {
-        try {
-            $clinics = NClinic::with(['major', 'doctors'])->paginate(10);
-            
-            return response()->json([
-                'status' => true,
-                'message' => 'Clinics retrieved successfully',
-                'data' => $clinics
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Error retrieving clinics',
-                'error' => $e->getMessage()
-            ], 500);
+    public function index(Request $request)
+{
+    try {
+        $query = NClinic::with(['user', 'major', 'doctors']);
+
+        // البحث والفلترة
+        if ($request->has('major_id')) {
+            $query->where('major_id', $request->major_id);
         }
-    }
 
+        if ($request->has('location')) {
+            $query->where('location', 'like', '%' . $request->location . '%');
+        }
+
+        if ($request->has('time')) {
+            $query->where('opening_time', '<=', $request->time)
+                  ->where('closing_time', '>=', $request->time);
+        }
+
+        // البحث حسب اسم العيادة (من خلال اسم المستخدم المرتبط)
+        if ($request->has('name')) {
+            $query->whereHas('user', function($q) use ($request) {
+                $q->where('name', 'like', '%' . $request->name . '%');
+            });
+        }
+
+        // الترتيب
+        $sortBy = $request->input('sort_by', 'created_at');
+        $sortOrder = $request->input('sort_order', 'desc');
+        $allowedSortFields = ['created_at', 'location', 'opening_time', 'closing_time'];
+        
+        if (in_array($sortBy, $allowedSortFields)) {
+            $query->orderBy($sortBy, $sortOrder);
+        }
+
+        // التصفح
+        $perPage = $request->input('per_page', 10);
+        $clinics = $query->paginate($perPage);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تم جلب العيادات بنجاح',
+            'data' => ClinicResource::collection($clinics),
+            'meta' => [
+                'current_page' => $clinics->currentPage(),
+                'from' => $clinics->firstItem(),
+                'last_page' => $clinics->lastPage(),
+                'per_page' => $clinics->perPage(),
+                'to' => $clinics->lastItem(),
+                'total' => $clinics->total(),
+                'has_more_pages' => $clinics->hasMorePages(),
+            ],
+            'links' => [
+                'first' => $clinics->url(1),
+                'last' => $clinics->url($clinics->lastPage()),
+                'prev' => $clinics->previousPageUrl(),
+                'next' => $clinics->nextPageUrl(),
+            ],
+            'filters' => [
+                'major_id' => $request->major_id,
+                'location' => $request->location,
+                'time' => $request->time,
+                'name' => $request->name,
+                'sort_by' => $sortBy,
+                'sort_order' => $sortOrder,
+                'per_page' => $perPage,
+            ],
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'حدث خطأ أثناء جلب العيادات',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
     public function store(Request $request)
     {
         try {
             $validated = $this->validateClinic($request);
-            
+
+            // Handle photos upload
             if ($request->hasFile('photo')) {
                 $photoPath = $request->file('photo')->store('clinics', 'public');
                 $validated['photo'] = $photoPath;
+            }
+
+            if ($request->hasFile('cover_photo')) {
+                $coverPhotoPath = $request->file('cover_photo')->store('clinics/covers', 'public');
+                $validated['cover_photo'] = $coverPhotoPath;
             }
 
             $clinic = NClinic::create($validated);
 
             return response()->json([
                 'status' => true,
-                'message' => 'Clinic created successfully',
-                'data' => $clinic->load('major')
+                'message' => 'تم إنشاء العيادة بنجاح',
+                'data' => new ClinicResource($clinic)
             ], 201);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation error',
-                'errors' => $e->errors()
-            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Error creating clinic',
-                'error' => $e->getMessage()
+                'message' => $e->getMessage()
             ], 500);
         }
     }
@@ -97,14 +143,12 @@ class NClinicsController extends Controller
         try {
             return response()->json([
                 'status' => true,
-                'message' => 'Clinic retrieved successfully',
-                'data' => $clinic->load(['major', 'doctors'])
+                'data' => new ClinicResource($clinic->load(['user', 'major', 'doctors']))
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Error retrieving clinic',
-                'error' => $e->getMessage()
+                'message' => $e->getMessage()
             ], 500);
         }
     }
@@ -114,8 +158,8 @@ class NClinicsController extends Controller
         try {
             $validated = $this->validateClinic($request, true);
 
+            // Handle photos update
             if ($request->hasFile('photo')) {
-
                 if ($clinic->photo) {
                     Storage::disk('public')->delete($clinic->photo);
                 }
@@ -123,43 +167,43 @@ class NClinicsController extends Controller
                 $validated['photo'] = $photoPath;
             }
 
-            $overlappingClinic = NClinic::where('major_id', $validated['major_id'])
-                ->where('id', '!=', $clinic->id)
-                ->where(function ($query) use ($validated) {
-                    $query->whereBetween('opening_time', [$validated['opening_time'], $validated['closing_time']])
-                        ->orWhereBetween('closing_time', [$validated['opening_time'], $validated['closing_time']]);
-                })->first();
-
-            if ($overlappingClinic) {
-                if (isset($validated['photo'])) {
-                    Storage::disk('public')->delete($validated['photo']);
+            if ($request->hasFile('cover_photo')) {
+                if ($clinic->cover_photo) {
+                    Storage::disk('public')->delete($clinic->cover_photo);
                 }
+                $coverPhotoPath = $request->file('cover_photo')->store('clinics/covers', 'public');
+                $validated['cover_photo'] = $coverPhotoPath;
+            }
+
+            // Check if working hours update affects doctors
+            if (($request->has('opening_time') && $request->opening_time != $clinic->opening_time) ||
+                ($request->has('closing_time') && $request->closing_time != $clinic->closing_time)) {
                 
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Working hours overlap with another clinic in the same major'
-                ], 422);
+                $conflictingDoctors = $clinic->doctors()
+                    ->where(function($query) use ($validated) {
+                        $query->where('start_work_time', '<', $validated['opening_time'])
+                              ->orWhere('end_work_time', '>', $validated['closing_time']);
+                    })->exists();
+
+                if ($conflictingDoctors) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'لا يمكن تغيير ساعات العمل. يوجد أطباء خارج هذه الساعات'
+                    ], 422);
+                }
             }
 
             $clinic->update($validated);
 
             return response()->json([
                 'status' => true,
-                'message' => 'Clinic updated successfully',
-                'data' => $clinic->fresh()->load('major')
+                'message' => 'تم تحديث العيادة بنجاح',
+                'data' => new ClinicResource($clinic)
             ]);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation error',
-                'errors' => $e->errors()
-            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Error updating clinic',
-                'error' => $e->getMessage()
+                'message' => $e->getMessage()
             ], 500);
         }
     }
@@ -167,66 +211,47 @@ class NClinicsController extends Controller
     public function destroy(NClinic $clinic)
     {
         try {
-            if ($clinic->appointments()->where('status', 'scheduled')->exists()) {
+            if ($clinic->doctors()->exists()) {
                 return response()->json([
                     'status' => false,
-                    'message' => 'Cannot delete clinic with active appointments'
+                    'message' => 'لا يمكن حذف العيادة. يوجد أطباء مرتبطين بها'
                 ], 422);
             }
 
+            // Delete photos
             if ($clinic->photo) {
                 Storage::disk('public')->delete($clinic->photo);
+            }
+            if ($clinic->cover_photo) {
+                Storage::disk('public')->delete($clinic->cover_photo);
             }
 
             $clinic->delete();
 
             return response()->json([
                 'status' => true,
-                'message' => 'Clinic deleted successfully'
+                'message' => 'تم حذف العيادة بنجاح'
             ]);
-
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Error deleting clinic',
-                'error' => $e->getMessage()
+                'message' => $e->getMessage()
             ], 500);
         }
     }
-    public function search(Request $request)
+
+    public function getDoctors(NClinic $clinic)
     {
         try {
-            $query = NClinic::query()->with(['major', 'doctors']);
-
-            if ($request->has('name')) {
-                $query->where('name', 'like', '%' . $request->name . '%');
-            }
-
-            if ($request->has('location')) {
-                $query->where('location', 'like', '%' . $request->location . '%');
-            }
-
-            if ($request->has('status')) {
-                $query->where('status', $request->status);
-            }
-
-            if ($request->has('major_id')) {
-                $query->where('major_id', $request->major_id);
-            }
-
-            $clinics = $query->paginate(10);
-
+            $doctors = $clinic->doctors()->with('user')->get();
             return response()->json([
                 'status' => true,
-                'message' => 'Search results retrieved successfully',
-                'data' => $clinics
+                'data' => DoctorResource::collection($doctors)
             ]);
-
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Error searching clinics',
-                'error' => $e->getMessage()
+                'message' => $e->getMessage()
             ], 500);
         }
     }

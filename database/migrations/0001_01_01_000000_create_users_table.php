@@ -15,7 +15,6 @@ return new class extends Migration
             $table->string('password');
             $table->string('address');
             $table->integer('age');
-            $table->string('blood_type');
             $table->string('gender');
             $table->string('phone');
             $table->timestamps();

@@ -8,22 +8,22 @@ return new class extends Migration
 {
     public function up()
     {
-        Schema::create('diseases', function (Blueprint $table) {
+        Schema::create('patient_archives', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->string('classification');
-            $table->string('type');
+            $table->date('date');
+            $table->time('time');
             $table->text('description');
-            $table->text('symptoms');
-            $table->text('treatment_protocol');
+            $table->string('status');
+            $table->text('instructions');
+            $table->foreignId('patient_id')->constrained()->onDelete('cascade');
             $table->foreignId('doctor_id')->constrained()->onDelete('cascade');
-            $table->foreignId('patients_id')->constrained()->onDelete('cascade');
+            // $table->foreignId('nclinic_id')->constrained()->onDelete('cascade');
             $table->timestamps();
         });
     }
 
     public function down()
     {
-        Schema::dropIfExists('diseases');
+        Schema::dropIfExists('patient_archive');
     }
 };

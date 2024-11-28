@@ -14,16 +14,19 @@ class Disease extends Model
         'symptoms', 
         'treatment_protocol', 
         'doctor_id', 
-        'reservation_id'
+        'patients_id'
+
     ];
+
+    public function patient()
+    {
+        return $this->belongsTo(Patient::class, 'patients_id');
+    }
 
     public function doctor()
     {
         return $this->belongsTo(Doctor::class);
     }
 
-    public function reservation()
-    {
-        return $this->belongsTo(Reservation::class);
-    }
+   
 }

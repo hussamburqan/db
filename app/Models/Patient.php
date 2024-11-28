@@ -7,12 +7,11 @@ use Illuminate\Database\Eloquent\Model;
 class Patient extends Model
 {
     protected $fillable = [
-        'emergency_contact', 
-        'emergency_phone', 
         'medical_history',
-        'allergies', 
-        'current_medications', 
-        'medical_recommendations', 
+        'allergies',
+        'blood_type',
+        'current_medications',
+        'medical_recommendations',
         'user_id'
     ];
 
@@ -20,12 +19,10 @@ class Patient extends Model
     {
         return $this->belongsTo(User::class);
     }
-    
-    
 
-    public function appointments()
+    public function archives()
     {
-        return $this->hasMany(Appointment::class);
+        return $this->hasMany(PatientArchive::class);
     }
 
     public function reservations()
@@ -33,8 +30,8 @@ class Patient extends Model
         return $this->hasMany(Reservation::class);
     }
 
-    public function invoices()
+    public function diseases()
     {
-        return $this->hasMany(Invoice::class);
+        return $this->hasMany(Disease::class, 'patients_id'); 
     }
 }

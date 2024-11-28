@@ -10,10 +10,9 @@ return new class extends Migration
     {
         Schema::create('patients', function (Blueprint $table) {
             $table->id();
-            $table->string('emergency_contact');
-            $table->string('emergency_phone');
             $table->text('medical_history');
             $table->text('allergies');
+            $table->string('blood_type');
             $table->text('current_medications');
             $table->text('medical_recommendations');
             $table->foreignId('user_id')->constrained()->onDelete('cascade');

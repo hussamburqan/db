@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\{
     UserController, MajorController, NClinicsController,
-    DoctorController, PatientController, AppointmentController,
+    DoctorController, PatientController, PatientArchiveController,
     DiseaseController, ReservationController, InvoiceController,MedicalNewsController
 };
 
@@ -26,7 +26,7 @@ Route::middleware('auth:sanctum')->group(function () {
         'clinics' => NClinicsController::class,
         'doctors' => DoctorController::class,
         'patients' => PatientController::class,
-        'appointments' => AppointmentController::class,
+        'patientarchive' => PatientArchiveController::class,
         'diseases' => DiseaseController::class,
         'reservations' => ReservationController::class,
         'invoices' => InvoiceController::class,

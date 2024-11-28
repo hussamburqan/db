@@ -3,19 +3,22 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-
 class Doctor extends Model
 {
     protected $fillable = [
-        'name',
-        'experience_years', 
-        'specialization', 
-        'education', 
+        'experience_years',
+        'specialization',
+        'education',
+        'photo',
+        'start_work_time',
+        'end_work_time',
+        'default_time_reservations',
         'bio',
-        'major_id', 
-        'n_clinic_id',
-        'photo'
+        'user_id',
+        'major_id',
+        'nclinic_id'
     ];
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -26,19 +29,14 @@ class Doctor extends Model
         return $this->belongsTo(Major::class);
     }
 
-    public function nclinic()
+    public function clinic()
     {
         return $this->belongsTo(NClinic::class, 'nclinic_id');
     }
 
-    public function appointments()
+    public function archives()
     {
-        return $this->hasMany(Appointment::class);
-    }
-
-    public function diseases()
-    {
-        return $this->hasMany(Disease::class);
+        return $this->hasMany(PatientArchive::class);
     }
 
     public function reservations()
@@ -46,8 +44,8 @@ class Doctor extends Model
         return $this->hasMany(Reservation::class);
     }
 
-    public function invoices()
+    public function diseases()
     {
-        return $this->hasMany(Invoice::class);
+        return $this->hasMany(Disease::class);
     }
 }

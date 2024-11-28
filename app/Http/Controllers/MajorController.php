@@ -17,8 +17,6 @@ class MajorController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'is_active' => 'boolean'
         ]);
 
         $major = Major::create($validated);
@@ -34,8 +32,6 @@ class MajorController extends Controller
     {
         $validated = $request->validate([
             'name' => 'string|max:255',
-            'description' => 'string',
-            'is_active' => 'boolean'
         ]);
 
         $major->update($validated);

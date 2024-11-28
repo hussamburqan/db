@@ -12,12 +12,15 @@ return new class extends Migration
             $table->id();
             $table->integer('experience_years');
             $table->string('specialization');
-            $table->string('name');
             $table->string('education');
             $table->string('photo')->nullable();
+            $table->time('start_work_time');
+            $table->time('end_work_time');            
+            $table->integer('default_time_reservations');
             $table->text('bio');
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('major_id')->constrained()->onDelete('cascade');
-            $table->foreignId('n_clinic_id')->constrained('nclinics')->onDelete('cascade');
+            $table->foreignId('nclinic_id')->constrained('nclinics')->onDelete('cascade');
             $table->timestamps();
         });
     }
@@ -25,8 +28,8 @@ return new class extends Migration
     public function down()
     {
         Schema::table('doctors', function (Blueprint $table) {
-            $table->dropForeign(['n_clinic_id']);
-            $table->dropColumn('n_clinic_id');
+            $table->dropForeign(['nclinic_id']);
+            $table->dropColumn('nclinic_id');
         });
     }
 };

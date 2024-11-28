@@ -5,20 +5,24 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 
 class NClinic extends Model
-{    
+{
     protected $table = 'nclinics';
+    
     protected $fillable = [
-        'name',
+        'user_id',
+        'major_id',
         'location',
+        'photo',
+        'cover_photo',
         'description',
         'opening_time',
-        'closing_time',
-        'status',
-        'email',
-        'phone',
-        'major_id',
-        'photo'
+        'closing_time'
     ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 
     public function major()
     {
@@ -27,21 +31,6 @@ class NClinic extends Model
 
     public function doctors()
     {
-        return $this->hasMany(Doctor::class);
-    }
-
-    public function appointments()
-    {
-        return $this->hasMany(Appointment::class);
-    }
-
-    public function reservations()
-    {
-        return $this->hasMany(Reservation::class);
-    }
-
-    public function invoices()
-    {
-        return $this->hasMany(Invoice::class);
+        return $this->hasMany(Doctor::class, 'nclinic_id');
     }
 }

@@ -18,7 +18,6 @@ class UserController extends Controller
             'password' => $isUpdate ? 'nullable|min:8|confirmed' : 'required|min:8|confirmed',
             'address' => 'required|string',
             'age' => 'required|integer|between:1,120',
-            'blood_type' => 'required|in:A+,A-,B+,B-,AB+,AB-,O+,O-',
             'gender' => 'required|in:male,female,other',
             'phone' => 'required|string|regex:/^([0-9\s\-\+\(\)]*)$/|min:10',
         ];
@@ -44,7 +43,7 @@ class UserController extends Controller
             ], 201);
     
         } catch (\Illuminate\Validation\ValidationException $e) {
-            \Log::error('Validation Error:', $e->errors()); // Log errors
+            \Log::error('Validation Error:', $e->errors()); 
             return response()->json([
                 'status' => false,
                 'message' => 'Validation error',

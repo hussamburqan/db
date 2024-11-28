@@ -7,8 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 class Major extends Model
 {
     protected $fillable = [
-        'name', 
-        'description', 'is_active'];
+        'name'
+    ];
 
     public function doctors()
     {
