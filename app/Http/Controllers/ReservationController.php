@@ -4,50 +4,95 @@ namespace App\Http\Controllers;
 
 use App\Models\Reservation;
 use App\Models\Doctor;
+use App\Models\Patient;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use App\Http\Resources\ReservationResource;
+use Illuminate\Support\Facades\Storage;
 
 class ReservationController extends Controller
 {
-    private function validateReservation(Request $request)
+    public function getAvailableSlots(Request $request)
     {
-        return $request->validate([
-            'date' => 'required|date|after:today',
-            'time' => ['required', 'date_format:H:i', function($attribute, $value, $fail) use ($request) {
-                if ($request->filled('doctor_id') && $request->filled('date')) {
-                    // التحقق من أن الوقت متاح
-                    $existingReservation = Reservation::where('doctor_id', $request->doctor_id)
-                        ->where('date', $request->date)
-                        ->where('time', $value)
-                        ->exists();
+        try {
+            \Log::info('Starting getAvailableSlots', $request->all());
+    
+            $validated = $request->validate([
+                'doctor_id' => 'required|exists:doctors,id',
+                'date' => [
+                    'required',
+                    'date',
+                    'after:today',
+                    'before_or_equal:' . now()->addDays(30)->format('Y-m-d')
+                ],
+                'patient_id' => 'required|exists:patients,id'
+            ]);
+            $hasReservation = Reservation::where('patient_id', $validated['patient_id'])
+            ->where('date', $validated['date'])
+            ->where('status', '!=', 'cancelled')
+            ->exists();
 
-                    $existingArchive = PatientArchive::where('doctor_id', $request->doctor_id)
-                        ->where('date', $request->date)
-                        ->where('time', $value)
-                        ->exists();
-                    
-                    if ($existingReservation || $existingArchive) {
-                        $fail('هذا الوقت محجوز مسبقاً');
-                    }
-
-                    // التحقق من أوقات عمل الطبيب
-                    $doctor = Doctor::find($request->doctor_id);
-                    $requestTime = Carbon::createFromFormat('H:i', $value);
-                    
-                    if ($requestTime->format('H:i') < $doctor->start_work_time || 
-                        $requestTime->format('H:i') > $doctor->end_work_time) {
-                        $fail('الوقت خارج ساعات عمل الطبيب');
+        if ($hasReservation) {
+            return response()->json([
+                'status' => true,
+                'data' => [] 
+            ]);
+        }
+            $doctor = Doctor::findOrFail($validated['doctor_id']);
+            
+            \Log::info('Doctor working hours', [
+                'start' => $doctor->start_work_time,
+                'end' => $doctor->end_work_time
+            ]);
+    
+            $bookedSlots = Reservation::where('doctor_id', $doctor->id)
+                ->where('date', $validated['date'])
+                ->where('status', '!=', 'cancelled')
+                ->get();
+    
+            \Log::info('Booked slots', $bookedSlots->toArray());
+    
+            $availableSlots = [];
+            $currentTime = Carbon::createFromFormat('H:i:s', $doctor->start_work_time);
+            $endTime = Carbon::createFromFormat('H:i:s', $doctor->end_work_time);
+            $interval = $doctor->default_time_reservations ?? 30; 
+    
+            while ($currentTime < $endTime) {
+                $timeSlot = $currentTime->format('H:i');
+                $isAvailable = true;
+    
+                foreach ($bookedSlots as $booking) {
+                    $bookingStart = Carbon::createFromFormat('H:i:s', $booking->time);
+                    $bookingEnd = $bookingStart->copy()->addMinutes($booking->duration_minutes);
+    
+                    if ($currentTime >= $bookingStart && $currentTime < $bookingEnd) {
+                        $isAvailable = false;
+                        break;
                     }
                 }
-            }],
-            'duration_minutes' => 'required|integer|min:15|max:120',
-            'status' => 'required|in:pending,confirmed,cancelled',
-            'reason_for_visit' => 'required|string',
-            'notes' => 'nullable|string',
-            'patient_id' => 'required|exists:patients,id',
-            'doctor_id' => 'required|exists:doctors,id',
-            'nclinic_id' => 'required|exists:nclinics,id'
-        ]);
+    
+                if ($isAvailable) {
+                    $availableSlots[] = $timeSlot;
+                }
+    
+                $currentTime->addMinutes($interval);
+            }
+    
+            \Log::info('Available slots', $availableSlots);
+    
+            return response()->json([
+                'status' => true,
+                'data' => $availableSlots
+            ]);
+    
+        } catch (\Exception $e) {
+            \Log::error('Error in getAvailableSlots: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function index(Request $request)
@@ -55,30 +100,27 @@ class ReservationController extends Controller
         try {
             $query = Reservation::with(['patient.user', 'doctor.user', 'clinic']);
 
-            // Filter by patient
-            if ($request->has('patient_id')) {
+            if ($request->filled('patient_id')) {
                 $query->where('patient_id', $request->patient_id);
             }
 
-            // Filter by doctor
-            if ($request->has('doctor_id')) {
+            if ($request->filled('doctor_id')) {
                 $query->where('doctor_id', $request->doctor_id);
             }
 
-            // Filter by clinic
-            if ($request->has('clinic_id')) {
+            if ($request->filled('clinic_id')) {
                 $query->where('nclinic_id', $request->clinic_id);
             }
 
-            // Filter by date
-            if ($request->has('date')) {
+            if ($request->filled('date')) {
                 $query->whereDate('date', $request->date);
             }
 
-            // Filter by status
-            if ($request->has('status')) {
+            if ($request->filled('status')) {
                 $query->where('status', $request->status);
             }
+
+            $query->where('date', '>=', Carbon::today());
 
             $reservations = $query->orderBy('date', 'asc')
                                 ->orderBy('time', 'asc')
@@ -88,6 +130,7 @@ class ReservationController extends Controller
                 'status' => true,
                 'data' => ReservationResource::collection($reservations)
             ]);
+
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
@@ -99,9 +142,10 @@ class ReservationController extends Controller
     public function store(Request $request)
     {
         try {
+            DB::beginTransaction();
+
             $validated = $this->validateReservation($request);
 
-            // التحقق من أن المريض ليس لديه حجز آخر في نفس اليوم
             $existingReservation = Reservation::where('patient_id', $validated['patient_id'])
                 ->where('date', $validated['date'])
                 ->where('status', '!=', 'cancelled')
@@ -110,25 +154,27 @@ class ReservationController extends Controller
             if ($existingReservation) {
                 return response()->json([
                     'status' => false,
-                    'message' => 'لديك حجز آخر في نفس اليوم'
+                    'message' => 'You already have a reservation on this date'
                 ], 422);
             }
 
             $doctor = Doctor::find($validated['doctor_id']);
-            
-            // استخدام مدة الحجز الافتراضية للطبيب إذا لم يتم تحديد المدة
             if (!isset($validated['duration_minutes'])) {
                 $validated['duration_minutes'] = $doctor->default_time_reservations;
             }
 
             $reservation = Reservation::create($validated);
 
+            DB::commit();
+
             return response()->json([
                 'status' => true,
-                'message' => 'تم إنشاء الحجز بنجاح',
+                'message' => 'Reservation created successfully',
                 'data' => new ReservationResource($reservation)
             ], 201);
+
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'status' => false,
                 'message' => $e->getMessage()
@@ -154,47 +200,28 @@ class ReservationController extends Controller
     public function update(Request $request, Reservation $reservation)
     {
         try {
-            // التحقق من أن الحجز لم يتم إلغاؤه
             if ($reservation->status === 'cancelled') {
                 return response()->json([
                     'status' => false,
-                    'message' => 'لا يمكن تعديل حجز تم إلغاؤه'
+                    'message' => 'Cannot modify cancelled reservation'
                 ], 422);
             }
+
+            DB::beginTransaction();
 
             $validated = $this->validateReservation($request);
             $reservation->update($validated);
 
+            DB::commit();
+
             return response()->json([
                 'status' => true,
-                'message' => 'تم تحديث الحجز بنجاح',
+                'message' => 'Reservation updated successfully',
                 'data' => new ReservationResource($reservation)
             ]);
+
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function destroy(Reservation $reservation)
-    {
-        try {
-            if ($reservation->status === 'confirmed') {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'لا يمكن حذف حجز مؤكد'
-                ], 422);
-            }
-
-            $reservation->delete();
-
-            return response()->json([
-                'status' => true,
-                'message' => 'تم حذف الحجز بنجاح'
-            ]);
-        } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'status' => false,
                 'message' => $e->getMessage()
@@ -208,18 +235,24 @@ class ReservationController extends Controller
             if ($reservation->status === 'cancelled') {
                 return response()->json([
                     'status' => false,
-                    'message' => 'الحجز ملغي بالفعل'
+                    'message' => 'Reservation is already cancelled'
                 ], 422);
             }
 
+            DB::beginTransaction();
+
             $reservation->update(['status' => 'cancelled']);
+
+            DB::commit();
 
             return response()->json([
                 'status' => true,
-                'message' => 'تم إلغاء الحجز بنجاح',
+                'message' => 'Reservation cancelled successfully',
                 'data' => new ReservationResource($reservation)
             ]);
+
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'status' => false,
                 'message' => $e->getMessage()
@@ -227,28 +260,60 @@ class ReservationController extends Controller
         }
     }
 
-    public function confirm(Reservation $reservation)
+    private function validateReservation(Request $request)
     {
-        try {
-            if ($reservation->status !== 'pending') {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'لا يمكن تأكيد هذا الحجز'
-                ], 422);
-            }
-
-            $reservation->update(['status' => 'confirmed']);
-
-            return response()->json([
-                'status' => true,
-                'message' => 'تم تأكيد الحجز بنجاح',
-                'data' => new ReservationResource($reservation)
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => $e->getMessage()
-            ], 500);
-        }
+        return $request->validate([
+            'date' => [
+                'required',
+                'date',
+                'after:today',
+                'before_or_equal:' . now()->addDays(30)->format('Y-m-d')
+            ],
+            'time' => [
+                'required',
+                'date_format:H:i',
+                function($attribute, $value, $fail) use ($request) {
+                    if ($request->filled('doctor_id') && $request->filled('date')) {
+                        $doctor = Doctor::find($request->doctor_id);
+                        
+                        $requestTime = Carbon::createFromFormat('H:i', $value);
+                        $startTime = Carbon::createFromFormat('H:i:s', $doctor->start_work_time)->format('H:i');
+                        $endTime = Carbon::createFromFormat('H:i:s', $doctor->end_work_time)->format('H:i');
+    
+                        if ($value < $startTime || $value >= $endTime) {
+                            $fail("Time must be between {$startTime} and {$endTime}");
+                            return;
+                        }
+    
+                        $appointmentStart = $requestTime;
+                        $appointmentEnd = $requestTime->copy()
+                            ->addMinutes($request->duration_minutes ?? $doctor->default_time_reservations);
+    
+                        $existingAppointment = Reservation::where('doctor_id', $request->doctor_id)
+                            ->where('date', $request->date)
+                            ->where('status', '!=', 'cancelled')
+                            ->where(function($query) use ($appointmentStart, $appointmentEnd) {
+                                $query->where(function($q) use ($appointmentStart, $appointmentEnd) {
+                                    $q->whereTime('time', '<', $appointmentEnd->format('H:i'))
+                                      ->whereRaw("ADDTIME(time, SEC_TO_TIME(duration_minutes * 60)) > ?", 
+                                          [$appointmentStart->format('H:i')]);
+                                });
+                            })
+                            ->exists();
+    
+                        if ($existingAppointment) {
+                            $fail('This time slot is already booked');
+                        }
+                    }
+                }
+            ],
+            'duration_minutes' => 'required|integer|min:15|max:120',
+            'status' => 'required|in:pending,confirmed,cancelled',
+            'reason_for_visit' => 'required|string',
+            'notes' => 'nullable|string',
+            'patient_id' => 'required|exists:patients,id',
+            'doctor_id' => 'required|exists:doctors,id',
+            'nclinic_id' => 'required|exists:nclinics,id'
+        ]);
     }
 }

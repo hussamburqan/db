@@ -7,19 +7,25 @@ use App\Http\Controllers\{
     DiseaseController, ReservationController, InvoiceController,MedicalNewsController
 };
 
-// Public routes
 Route::post('/register', [UserController::class, 'register']);
 Route::post('/login', [UserController::class, 'login']);
 
-// Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [UserController::class, 'logout']);
     Route::get('/profile', [UserController::class, 'profile']);
     Route::put('/profile/update-password', [UserController::class, 'updatePassword']);
     
-    // Resources
+ 
 
-});   
+});  
+
+
+Route::middleware('api')->group(function () {    
+
+    Route::get('/reservations-slots', [ReservationController::class, 'getAvailableSlots']);
+    Route::apiResource('reservations', ReservationController::class);
+    Route::post('reservations/{reservation}/cancel', [ReservationController::class, 'cancel']);
+});
  Route::apiResources([
         'users' => UserController::class,
         'majors' => MajorController::class,
@@ -28,7 +34,6 @@ Route::middleware('auth:sanctum')->group(function () {
         'patients' => PatientController::class,
         'patientarchive' => PatientArchiveController::class,
         'diseases' => DiseaseController::class,
-        'reservations' => ReservationController::class,
         'invoices' => InvoiceController::class,
         'medical-news' => MedicalNewsController::class,
     ]);

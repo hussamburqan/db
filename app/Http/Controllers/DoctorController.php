@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Http\Resources\DoctorResource;
 use App\Models\NClinic;
 use Illuminate\Support\Facades\DB;
+use App\Models\User;
 
 class DoctorController extends Controller
 {
@@ -29,7 +30,6 @@ class DoctorController extends Controller
             }],
             'default_time_reservations' => 'required|integer|min:15|max:120',
             'bio' => 'required|string',
-            'user_id' => $isUpdate ? 'exists:users,id' : 'required|exists:users,id|unique:doctors',
             'major_id' => 'required|exists:majors,id',
             'nclinic_id' => 'required|exists:nclinics,id'
         ]);
@@ -62,7 +62,7 @@ class DoctorController extends Controller
     
             return response()->json([
                 'status' => true,
-                'data' => $doctors  // بدون استخدام Resource
+                'data' => $doctors  
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -77,7 +77,6 @@ class DoctorController extends Controller
         try {
             DB::beginTransaction();
     
-            // Validate User Fields
             $userValidated = $request->validate([
                 'name' => 'required|string',
                 'email' => 'required|email|unique:users',
@@ -88,23 +87,18 @@ class DoctorController extends Controller
                 'phone' => 'required|string'
             ]);
     
-            // Hash the password and create the User
             $userValidated['password'] = bcrypt($userValidated['password']);
             $user = User::create($userValidated);
     
-            // Generate the token for the user
             $token = $user->createToken('auth_token')->plainTextToken;
     
-            // Validate Doctor Fields
             $doctorValidated = $this->validateDoctor($request);
     
-            // Handle Photo Upload
             if ($request->hasFile('photo')) {
                 $photoPath = $request->file('photo')->store('doctors', 'public');
                 $doctorValidated['photo'] = $photoPath;
             }
     
-            // Check Clinic Working Hours
             $clinic = NClinic::find($doctorValidated['nclinic_id']);
             if ($doctorValidated['start_work_time'] < $clinic->opening_time || 
                 $doctorValidated['end_work_time'] > $clinic->closing_time) {
@@ -114,14 +108,11 @@ class DoctorController extends Controller
                 ], 422);
             }
     
-            // Create Doctor Record
             $doctorValidated['user_id'] = $user->id;
             $doctor = Doctor::create($doctorValidated);
     
-            // Commit the transaction
             DB::commit();
     
-            // Return success response
             return response()->json([
                 'status' => true,
                 'message' => 'تم إضافة الطبيب بنجاح',
@@ -130,7 +121,6 @@ class DoctorController extends Controller
                 'token_type' => 'Bearer'
             ], 201);
         } catch (\Exception $e) {
-            // Rollback transaction if any exception occurs
             DB::rollBack();
     
             return response()->json([
@@ -223,41 +213,72 @@ class DoctorController extends Controller
     }
 
     public function getAvailableSlots(Request $request)
-    {
-        try {
-            $request->validate([
-                'doctor_id' => 'required|exists:doctors,id',
-                'date' => 'required|date|after_or_equal:today'
-            ]);
+{
+    try {
+        $request->validate([
+            'doctor_id' => 'required|exists:doctors,id',
+            'date' => 'required|date|after_or_equal:today'
+        ]);
 
-            $doctor = Doctor::findOrFail($request->doctor_id);
+        $doctor = Doctor::findOrFail($request->doctor_id);
+        
+        // Get existing reservations for the date
+        $bookedTimes = Reservation::where('doctor_id', $doctor->id)
+            ->where('date', $request->date)
+            ->where('status', '!=', 'cancelled')
+            ->pluck('time')
+            ->toArray();
+
+        // Also check archived appointments
+        $archivedTimes = PatientArchive::where('doctor_id', $doctor->id)
+            ->where('date', $request->date)
+            ->pluck('time')
+            ->toArray();
+
+        $bookedTimes = array_merge($bookedTimes, $archivedTimes);
+
+        // Generate all possible time slots
+        $slots = [];
+        $current = Carbon::createFromFormat('H:i', $doctor->start_work_time);
+        $end = Carbon::createFromFormat('H:i', $doctor->end_work_time);
+
+        // Subtract duration from end time to ensure last appointment fits
+        $end = $end->subMinutes($doctor->default_time_reservations);
+
+        while ($current <= $end) {
+            $timeSlot = $current->format('H:i');
             
-            $bookedTimes = PatientArchive::where('doctor_id', $doctor->id)
-                ->where('date', $request->date)
-                ->pluck('time')
-                ->toArray();
+            // Check if this slot is available
+            $slotEnd = $current->copy()->addMinutes($doctor->default_time_reservations);
+            $isAvailable = true;
 
-            $slots = [];
-            $current = Carbon::createFromFormat('H:i', $doctor->start_work_time);
-            $end = Carbon::createFromFormat('H:i', $doctor->end_work_time);
+            foreach ($bookedTimes as $bookedTime) {
+                $bookingStart = Carbon::createFromFormat('H:i', $bookedTime);
+                $bookingEnd = $bookingStart->copy()->addMinutes($doctor->default_time_reservations);
 
-            while ($current < $end) {
-                $timeSlot = $current->format('H:i');
-                if (!in_array($timeSlot, $bookedTimes)) {
-                    $slots[] = $timeSlot;
+                // Check if slots overlap
+                if ($current < $bookingEnd && $slotEnd > $bookingStart) {
+                    $isAvailable = false;
+                    break;
                 }
-                $current->addMinutes($doctor->default_time_reservations);
             }
 
-            return response()->json([
-                'status' => true,
-                'data' => $slots
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => $e->getMessage()
-            ], 500);
+            if ($isAvailable) {
+                $slots[] = $timeSlot;
+            }
+
+            $current->addMinutes($doctor->default_time_reservations);
         }
+
+        return response()->json([
+            'status' => true,
+            'data' => $slots
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => $e->getMessage()
+        ], 500);
     }
+}
 }
