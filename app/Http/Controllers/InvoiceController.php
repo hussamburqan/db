@@ -62,33 +62,48 @@ class InvoiceController extends Controller
             ], 500);
         }
     }
-
     public function store(Request $request)
     {
         try {
-            $validated = $this->validateInvoice($request);
-
+            $validated = $request->validate([
+                'amount' => 'required|numeric|min:0',
+                'reservation_id' => 'required|exists:reservations,id',
+                'payment_method' => 'required|in:cash,credit_card,debit_card,insurance',
+                'payment_status' => 'required|in:pending,paid,cancelled,refunded',
+                'notes' => 'nullable|string'
+            ]);
+ 
+            $reservation = Reservation::findOrFail($validated['reservation_id']);
+            
             $validated['invoice_number'] = 'INV-' . date('Y') . Str::random(6);
-
+            $validated['nclinic_id'] = $reservation->nclinic_id;
+            $validated['patient_archive_id'] = $reservation->patient_archive_id;
+ 
             if ($validated['payment_status'] === 'paid') {
                 $validated['paid_at'] = now();
             }
-
+ 
             $invoice = Invoice::create($validated);
-
-            $archive = PatientArchive::find($validated['patient_archive_id']);
-            $archive->update(['status' => 'completed']);
-
-            return response()->json([
-                'status' => true,
-                'message' => 'تم إنشاء الفاتورة بنجاح',
-                'data' => new InvoiceResource($invoice)
-            ], 201);
+ 
+            if($request->wantsJson()) {
+                return response()->json([
+                    'status' => true, 
+                    'message' => 'تم إنشاء الفاتورة بنجاح',
+                    'data' => new InvoiceResource($invoice)
+                ], 201);
+            }
+ 
+            return back()->with('success', 'تم إنشاء الفاتورة بنجاح');
+ 
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => $e->getMessage()
-            ], 500);
+            if($request->wantsJson()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => $e->getMessage()
+                ], 500);
+            }
+ 
+            return back()->with('error', 'حدث خطأ أثناء إنشاء الفاتورة');
         }
     }
 

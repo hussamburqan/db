@@ -17,36 +17,25 @@ class ReservationResource extends JsonResource
             'status' => $this->status,
             'reason_for_visit' => $this->reason_for_visit,
             'notes' => $this->notes,
-            
-            'patient' => $this->whenLoaded('patient', function() {
-                return [
-                    'id' => $this->patient->id,
-                    'user' => [
-                        'id' => $this->patient->user->id,
-                        'name' => $this->patient->user->name,
-                        'email' => $this->patient->user->email,
-                        'phone' => $this->patient->user->phone ?? null,
-                    ]
-                ];
-            }),
-            
             'doctor' => $this->whenLoaded('doctor', function() {
                 return [
                     'id' => $this->doctor->id,
                     'user' => [
                         'id' => $this->doctor->user->id,
                         'name' => $this->doctor->user->name,
-                        'email' => $this->doctor->user->email,
-                        'phone' => $this->doctor->user->phone ?? null,
-                    ],
-                    'speciality' => $this->doctor->speciality ?? null,
+
+                    ],                        
+                    'photo' => $this->doctor->photo,
+                    'speciality' => $this->doctor->specialization ?? null,
                 ];
             }),
             
             'clinic' => $this->whenLoaded('clinic', function() {
                 return [
                     'id' => $this->clinic->id,
-                    'name' => $this->clinic->name,
+                    'name' => $this->clinic->user->name,
+                    'phone' => $this->clinic->user->phone,
+
                 ];
             }),
             

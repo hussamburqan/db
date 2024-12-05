@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Resources\ReservationResource;
 use Illuminate\Support\Facades\Storage;
 
+
 class ReservationController extends Controller
 {
     public function getAvailableSlots(Request $request)
@@ -99,45 +100,90 @@ class ReservationController extends Controller
     {
         try {
             $query = Reservation::with(['patient.user', 'doctor.user', 'clinic']);
-
-            if ($request->filled('patient_id')) {
-                $query->where('patient_id', $request->patient_id);
-            }
-
-            if ($request->filled('doctor_id')) {
-                $query->where('doctor_id', $request->doctor_id);
-            }
-
-            if ($request->filled('clinic_id')) {
-                $query->where('nclinic_id', $request->clinic_id);
-            }
-
-            if ($request->filled('date')) {
-                $query->whereDate('date', $request->date);
-            }
-
-            if ($request->filled('status')) {
-                $query->where('status', $request->status);
-            }
-
-            $query->where('date', '>=', Carbon::today());
-
+    
             $reservations = $query->orderBy('date', 'asc')
-                                ->orderBy('time', 'asc')
-                                ->paginate(10);
-
+                                  ->orderBy('time', 'asc')
+                                  ->get();
+    
             return response()->json([
                 'status' => true,
-                'data' => ReservationResource::collection($reservations)
+                'data' => ReservationResource::collection($reservations),
             ]);
-
+    
         } catch (\Exception $e) {
+            \Log::error('Error fetching reservations:', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+    
             return response()->json([
                 'status' => false,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
+
+    public function search(Request $request)
+{
+    try {
+        \Log::info('Search parameters:', $request->all()); // تسجيل المعطيات المدخلة
+        
+        $query = Reservation::with(['patient.user', 'doctor.user', 'clinic']);
+
+        // التحقق من كل معيار بحث وإضافته إلى الاستعلام
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('doctor_id')) {
+            $query->where('doctor_id', $request->doctor_id);
+        }
+
+        if ($request->filled('patient_id')) {
+            $query->where('patient_id', $request->patient_id);
+        }
+
+        if ($request->filled('date')) {
+            $query->whereDate('date', $request->date);
+        }
+
+        if ($request->filled('clinic_id')) {
+            $query->where('clinic_id', $request->clinic_id);
+        }
+
+        // تنفيذ الاستعلام وجلب النتائج
+        $reservations = $query->orderBy('date', 'asc')
+                              ->orderBy('time', 'asc')
+                              ->get();
+
+        // التحقق من النتائج
+        if ($reservations->isEmpty()) {
+            return response()->json([
+                'status' => true,
+                'message' => 'No reservations found with the given criteria',
+                'data' => []
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'data' => ReservationResource::collection($reservations)
+        ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('Error in search:', [
+            'message' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'status' => false,
+            'message' => 'An error occurred during search',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
 
     public function store(Request $request)
     {
@@ -182,6 +228,29 @@ class ReservationController extends Controller
         }
     }
 
+    public function destroy(Reservation $reservation)
+    {
+        try {
+            DB::beginTransaction();
+    
+            $reservation->delete();
+    
+            DB::commit();
+    
+            return response()->json([
+                'status' => true,
+                'message' => 'Reservation deleted successfully'
+            ]);
+    
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
     public function show(Reservation $reservation)
     {
         try {
@@ -228,7 +297,27 @@ class ReservationController extends Controller
             ], 500);
         }
     }
+    public function confirm(Reservation $reservation)
+    {
+        try {
+            $reservation->update(['status' => 'confirmed']);
 
+            return back()->with('success', 'تم تأكيد الموعد بنجاح');
+        } catch (\Exception $e) {
+            return back()->with('error', 'حدث خطأ أثناء تأكيد الموعد');
+        }
+    }
+
+    public function reject(Reservation $reservation)
+    {
+        try {
+            $reservation->update(['status' => 'cancelled']);
+
+            return back()->with('success', 'تم رفض الموعد بنجاح');
+        } catch (\Exception $e) {
+            return back()->with('error', 'حدث خطأ أثناء رفض الموعد');
+        }
+    }
     public function cancel(Reservation $reservation)
     {
         try {
@@ -308,7 +397,7 @@ class ReservationController extends Controller
                 }
             ],
             'duration_minutes' => 'required|integer|min:15|max:120',
-            'status' => 'required|in:pending,confirmed,cancelled',
+            'status' => 'required|in:pending,accepted,confirmed,cancelled',
             'reason_for_visit' => 'required|string',
             'notes' => 'nullable|string',
             'patient_id' => 'required|exists:patients,id',

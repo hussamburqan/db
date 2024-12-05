@@ -134,17 +134,7 @@ class DoctorController extends Controller
 
     public function show(Doctor $doctor)
     {
-        try {
-            return response()->json([
-                'status' => true,
-                'data' => new DoctorResource($doctor->load(['user', 'major', 'clinic']))
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => $e->getMessage()
-            ], 500);
-        }
+        return view('doctor.show', compact('doctor'));
     }
 
     public function update(Request $request, Doctor $doctor)
