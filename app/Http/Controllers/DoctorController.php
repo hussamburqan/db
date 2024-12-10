@@ -8,6 +8,8 @@ use App\Http\Resources\DoctorResource;
 use App\Models\NClinic;
 use Illuminate\Support\Facades\DB;
 use App\Models\User;
+use Carbon\Carbon;
+use App\Models\Reservation;
 
 class DoctorController extends Controller
 {
@@ -77,8 +79,14 @@ class DoctorController extends Controller
         try {
             DB::beginTransaction();
     
+            // Log the incoming time data for debugging
+            \Log::info('Incoming time data:', [
+                'start_time' => $request->start_work_time,
+                'end_time' => $request->end_work_time
+            ]);
+    
             $userValidated = $request->validate([
-                'name' => 'required|string',
+                'name' => 'required|string|max:255',
                 'email' => 'required|email|unique:users',
                 'password' => 'required|min:8|confirmed',
                 'address' => 'required|string',
@@ -89,7 +97,6 @@ class DoctorController extends Controller
     
             $userValidated['password'] = bcrypt($userValidated['password']);
             $user = User::create($userValidated);
-    
             $token = $user->createToken('auth_token')->plainTextToken;
     
             $doctorValidated = $this->validateDoctor($request);
@@ -99,12 +106,59 @@ class DoctorController extends Controller
                 $doctorValidated['photo'] = $photoPath;
             }
     
-            $clinic = NClinic::find($doctorValidated['nclinic_id']);
-            if ($doctorValidated['start_work_time'] < $clinic->opening_time || 
-                $doctorValidated['end_work_time'] > $clinic->closing_time) {
+            $clinic = NClinic::findOrFail($doctorValidated['nclinic_id']);
+    
+            // تعديل طريقة معالجة الأوقات
+            try {
+                // إضافة ':00' للثواني إذا لم تكن موجودة
+                $doctorStartTime = $doctorValidated['start_work_time'];
+                $doctorEndTime = $doctorValidated['end_work_time'];
+                
+                if (strlen($doctorStartTime) === 5) {
+                    $doctorStartTime .= ':00';
+                }
+                if (strlen($doctorEndTime) === 5) {
+                    $doctorEndTime .= ':00';
+                }
+    
+                $clinicOpeningTime = Carbon::createFromFormat('H:i:s', $clinic->opening_time);
+                $clinicClosingTime = Carbon::createFromFormat('H:i:s', $clinic->closing_time);
+                $doctorStartTime = Carbon::createFromFormat('H:i:s', $doctorStartTime);
+                $doctorEndTime = Carbon::createFromFormat('H:i:s', $doctorEndTime);
+    
+                \Log::info('Processed times:', [
+                    'clinic_opening' => $clinicOpeningTime->format('H:i:s'),
+                    'clinic_closing' => $clinicClosingTime->format('H:i:s'),
+                    'doctor_start' => $doctorStartTime->format('H:i:s'),
+                    'doctor_end' => $doctorEndTime->format('H:i:s')
+                ]);
+    
+                if ($doctorStartTime->lt($clinicOpeningTime) || $doctorEndTime->gt($clinicClosingTime)) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'أوقات عمل الطبيب يجب أن تكون ضمن أوقات عمل العيادة',
+                        'clinic_hours' => [
+                            'opening' => $clinicOpeningTime->format('H:i'),
+                            'closing' => $clinicClosingTime->format('H:i')
+                        ]
+                    ], 422);
+                }
+    
+                // تحديث الأوقات في البيانات المصادق عليها
+                $doctorValidated['start_work_time'] = $doctorStartTime->format('H:i:s');
+                $doctorValidated['end_work_time'] = $doctorEndTime->format('H:i:s');
+    
+            } catch (\Exception $e) {
+                \Log::error('Time processing error:', [
+                    'error' => $e->getMessage(),
+                    'start_time' => $doctorValidated['start_work_time'] ?? null,
+                    'end_time' => $doctorValidated['end_work_time'] ?? null
+                ]);
+                
                 return response()->json([
                     'status' => false,
-                    'message' => 'أوقات عمل الطبيب يجب أن تكون ضمن أوقات عمل العيادة'
+                    'message' => 'صيغة الوقت غير صحيحة. الرجاء استخدام الصيغة HH:mm',
+                    'error_details' => $e->getMessage()
                 ], 422);
             }
     
@@ -120,21 +174,32 @@ class DoctorController extends Controller
                 'access_token' => $token,
                 'token_type' => 'Bearer'
             ], 201);
+    
         } catch (\Exception $e) {
             DB::rollBack();
-    
+            \Log::error('Doctor creation error:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'status' => false,
-                'message' => $e->getMessage()
+                'message' => 'حدث خطأ أثناء إضافة الطبيب',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
     
-    
 
     public function show(Doctor $doctor)
     {
-        return view('doctor.show', compact('doctor'));
+        $todayAppointments = Reservation::where('doctor_id', $doctor->id)
+            ->whereDate('date', today())
+            ->with(['patient.user'])
+            ->orderBy('time')
+            ->get();
+    
+        return view('doctor\show', compact('doctor', 'todayAppointments'));
     }
 
     public function update(Request $request, Doctor $doctor)

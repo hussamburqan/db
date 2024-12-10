@@ -26,6 +26,8 @@
             max-width: 400px;
         }
         .logo {
+            object-fit: cover;
+
             display: block;
             margin: 0 auto 1rem;
             width: 120px;

@@ -13,29 +13,22 @@ class Invoice extends Model
         'payment_status',
         'paid_at', 
         'notes', 
-        'appointment_id', 
-        'patient_id',
-        'doctor_id', 
+        'reservation_id', 
         'nclinic_id'
     ];
 
-    public function appointment()
+    protected $casts = [
+        'paid_at' => 'datetime',
+        'amount' => 'decimal:2'
+    ];
+
+    public function reservation()
     {
-        return $this->belongsTo(Appointment::class);
+        return $this->belongsTo(Reservation::class);
     }
 
-    public function patient()
+    public function clinic()
     {
-        return $this->belongsTo(Patient::class);
-    }
-
-    public function doctor()
-    {
-        return $this->belongsTo(Doctor::class);
-    }
-
-    public function nclinic()
-    {
-        return $this->belongsTo(NClinic::class);
+        return $this->belongsTo(NClinic::class, 'nclinic_id');
     }
 }

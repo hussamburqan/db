@@ -27,6 +27,7 @@
             margin: 2rem auto;
         }
         .logo {
+            object-fit: cover;
             display: block;
             margin: 0 auto 1rem;
             width: 120px;

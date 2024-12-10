@@ -11,25 +11,43 @@ class PatientArchiveResource extends JsonResource
         return [
             'id' => $this->id,
             'date' => $this->date,
-            'time' => $this->time,
             'description' => $this->description,
             'status' => $this->status,
             'instructions' => $this->instructions,
-            'doctor' => [
+            'doctor' => $this->doctor ? [
                 'id' => $this->doctor->id,
-                'name' => $this->doctor->user->name,
                 'specialization' => $this->doctor->specialization,
                 'education' => $this->doctor->education,
                 'experience_years' => $this->doctor->experience_years,
                 'photo' => $this->doctor->photo,
-                'bio' => $this->doctor->bio
-            ],
-            'patient' => [
+                'bio' => $this->doctor->bio,
+                'user' => $this->doctor->user ? [
+                    'id' => $this->doctor->user->id,
+                    'name' => $this->doctor->user->name,
+                    'email' => $this->doctor->user->email,
+                    'phone' => $this->doctor->user->phone,
+                ] : null,
+            ] : null,
+            'reservation' => $this->reservation ? [
+                'id' => $this->reservation->id,
+                'date' => $this->reservation->date,
+                'time' => $this->reservation->time,
+                'duration_minutes' => $this->reservation->duration_minutes,
+                'status' => $this->reservation->status,
+                'reason_for_visit' => $this->reservation->reason_for_visit,
+                'notes' => $this->reservation->notes,
+            ] : null,
+            'patient' => $this->patient ? [
                 'id' => $this->patient->id,
-                'name' => $this->patient->user->name,
-            ],
+                'user' => $this->patient->user ? [
+                    'id' => $this->patient->user->id,
+                    'name' => $this->patient->user->name,
+                    'email' => $this->patient->user->email,
+                    'phone' => $this->patient->user->phone,
+                ] : null,
+            ] : null,
             'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at
+            'updated_at' => $this->updated_at,
         ];
     }
 }

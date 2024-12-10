@@ -166,6 +166,8 @@
 
                 <div class="info-item">
                     <h3>معلومات العمل</h3>
+                    <p><strong>رقم الهوية:</strong> {{ $doctor->national_id }}</p>
+                    <p><strong>سعر الكشف:</strong> {{ $doctor->price }} ريال</p>
                     <p><strong>مدة الكشف:</strong> {{ $doctor->default_time_reservations }} دقيقة</p>
                 </div>
             </div>
@@ -184,6 +186,18 @@
                     </div>
                 </div>
             </div>
+
+            <div class="actions">
+                <a href="{{ route('doctors.edit', $doctor->id) }}" class="btn btn-primary">تعديل البيانات</a>
+                <form action="{{ route('doctors.destroy', $doctor->id) }}" method="POST" style="display: inline;">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('هل أنت متأكد من حذف هذا الطبيب؟')">
+                        حذف الطبيب
+                    </button>
+                </form>
+            </div>
+        </div>
 
         @if($todayAppointments->isNotEmpty())
         <div class="schedule">

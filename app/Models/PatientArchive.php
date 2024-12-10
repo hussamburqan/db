@@ -2,34 +2,29 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class PatientArchive extends Model
 {
-    protected $table = 'patient_archives';
+    use HasFactory;
 
     protected $fillable = [
-        'date',
-        'time',
-        'description',
-        'status',
-        'instructions',
-        'patient_id',
-        'doctor_id'
+        'date', 'time', 'description', 'status', 'instructions', 'reservation_id', 'doctor_id'
     ];
-
-    public function patient()
-    {
-        return $this->belongsTo(Patient::class);
-    }
 
     public function doctor()
     {
         return $this->belongsTo(Doctor::class);
     }
 
-    public function invoice()
+    public function patient()
     {
-        return $this->hasOne(Invoice::class);
+        return $this->belongsTo(Patient::class, 'reservation_id', 'id'); 
+    }
+
+    public function reservation()
+    {
+        return $this->belongsTo(Reservation::class);
     }
 }

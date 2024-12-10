@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Patient;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\DB;  
 use App\Http\Resources\PatientResource;
 
 class PatientController extends Controller
@@ -52,10 +52,10 @@ class PatientController extends Controller
 
    public function store(Request $request)
    {
-       try {
-           DB::beginTransaction();
-
-           $userValidated = $request->validate([
+    try {
+        DB::beginTransaction();
+    
+        $userValidated = $request->validate([
             'name' => 'required|string',
             'email' => 'required|email|unique:users',
             'password' => 'required|min:8|confirmed',
@@ -63,33 +63,42 @@ class PatientController extends Controller
             'age' => 'required|integer|between:1,120',
             'gender' => 'required|in:male,female',
             'phone' => 'required|string'
-           ]);
-
-           $userValidated['password'] = bcrypt($userValidated['password']);
-           $user = User::create($userValidated);
-           $token = $user->createToken('auth_token')->plainTextToken;
-
-           $patientValidated = $this->validatePatient($request);
-           $patientValidated['user_id'] = $user->id;
-
-           $patient = Patient::create($patientValidated);
-
-           DB::commit();
-
-           return response()->json([
-               'status' => true,
-               'message' => 'تم إنشاء حساب المريض بنجاح',
-               'data' => new PatientResource($patient),
-               'access_token' => $token,
-               'token_type' => 'Bearer'
-           ], 201);
-       } catch (\Exception $e) {
-           DB::rollBack();
-           return response()->json([
-               'status' => false,
-               'message' => $e->getMessage()
-           ], 500);
-       }
+        ]);
+        \Log::info('User Validated:', $userValidated);
+    
+        $userValidated['password'] = bcrypt($userValidated['password']);
+        $user = User::create($userValidated);
+    
+        if (!$user) {
+            throw new \Exception('User creation failed.');
+        }
+    
+        $patientValidated = $this->validatePatient($request);
+        \Log::info('Patient Validated:', $patientValidated);
+    
+        $patientValidated['user_id'] = $user->id;
+        $patient = Patient::create($patientValidated);
+    
+        if (!$patient) {
+            throw new \Exception('Patient creation failed.');
+        }
+    
+        DB::commit();
+    
+        return response()->json([
+            'status' => true,
+            'message' => 'تم إنشاء حساب المريض بنجاح',
+            'data' => new PatientResource($patient)
+        ], 201);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        \Log::error('Error:', ['message' => $e->getMessage()]);
+        return response()->json([
+            'status' => false,
+            'message' => $e->getMessage()
+        ], 500);
+    }
+    
    }
 
    public function show(Patient $patient)

@@ -126,11 +126,10 @@ class ReservationController extends Controller
     public function search(Request $request)
 {
     try {
-        \Log::info('Search parameters:', $request->all()); // تسجيل المعطيات المدخلة
+        \Log::info('Search parameters:', $request->all()); 
         
         $query = Reservation::with(['patient.user', 'doctor.user', 'clinic']);
 
-        // التحقق من كل معيار بحث وإضافته إلى الاستعلام
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
@@ -151,12 +150,10 @@ class ReservationController extends Controller
             $query->where('clinic_id', $request->clinic_id);
         }
 
-        // تنفيذ الاستعلام وجلب النتائج
         $reservations = $query->orderBy('date', 'asc')
                               ->orderBy('time', 'asc')
                               ->get();
 
-        // التحقق من النتائج
         if ($reservations->isEmpty()) {
             return response()->json([
                 'status' => true,
@@ -183,7 +180,29 @@ class ReservationController extends Controller
         ], 500);
     }
 }
+public function updateStatus(Request $request, Reservation $reservation)
+{
+    try {
+        $validated = $request->validate([
+            'status' => 'required|in:pending,confirmed,cancelled'
+        ]);
 
+        $reservation->update([
+            'status' => $validated['status']
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'تم تحديث حالة الموعد بنجاح'
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
 
     public function store(Request $request)
     {
@@ -354,8 +373,8 @@ class ReservationController extends Controller
         return $request->validate([
             'date' => [
                 'required',
-                'date',
-                'after:today',
+                'date',         
+                //'after:today',
                 'before_or_equal:' . now()->addDays(30)->format('Y-m-d')
             ],
             'time' => [

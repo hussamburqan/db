@@ -23,12 +23,18 @@ class Reservation extends Model
         'date' => 'date',
         'duration_minutes' => 'integer',
     ];
-
+    public function invoice()
+    {
+        return $this->hasOne(Invoice::class);
+    }
     public function patient(): BelongsTo
     {
         return $this->belongsTo(Patient::class);
     }
-
+    public function patientArchive()
+    {
+        return $this->hasOne(PatientArchive::class);
+    }
     public function doctor(): BelongsTo
     {
         return $this->belongsTo(Doctor::class);
