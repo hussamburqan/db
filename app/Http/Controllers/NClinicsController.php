@@ -359,7 +359,7 @@ class NClinicsController extends Controller
                 ->get();
                 
             $todayReservations = Reservation::where('nclinic_id', $clinic->id)
-                ->where('status', 'confirmed')
+                ->where('status', 'accepted')
                 ->whereDate('date', today())
                 ->orderBy('time', 'asc')
                 ->get();

@@ -302,7 +302,7 @@ select.form-control {
                                     <td>{{ $reservation->doctor->user->name }}</td>
                                     <td>{{ $reservation->reason_for_visit }}</td>
                                     <td>
-                                        <form action="{{ route('reservations.confirm', $reservation->id) }}" method="POST" style="display: inline;">
+                                        <form action="{{ route('reservations.accepted', $reservation->id) }}" method="POST" style="display: inline;">
                                             @csrf
                                             <button type="submit" class="btn btn-success">قبول</button>
                                         </form>
@@ -518,40 +518,40 @@ function closeStatusModal() {
 }
 
 async function handleStatusSubmit(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(this);
-    const reservationId = document.getElementById('statusReservationId').value;
+    e.preventDefault(); 
+
+    const form = e.target; 
+    const formData = new FormData(form); 
+    const reservationId = document.getElementById('statusReservationId').value; 
     
     try {
         const response = await fetch(`/api/reservations/${reservationId}/status`, {
-            method: 'PUT',
+            method: 'PUT', 
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
+                'Accept': 'application/json', 
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
             },
             body: JSON.stringify({
-                status: formData.get('status')
+                status: formData.get('status') 
             })
         });
 
         const result = await response.json();
-        
+
         if (!response.ok) {
             throw new Error(result.message || 'حدث خطأ أثناء تحديث الحالة');
         }
 
-        if (result.status) {
-            alert('تم تحديث الحالة بنجاح');
-            closeStatusModal();
-            window.location.reload();
-        }
+        alert('تم تحديث الحالة بنجاح');
+        closeStatusModal(); 
+        window.location.reload();
     } catch (error) {
-        console.error('Error:', error);
-        alert(error.message);
+        console.error('Error:', error); 
+        alert(error.message); 
     }
 }
+
 
         document.addEventListener('DOMContentLoaded', function() {
             const invoiceButtons = document.querySelectorAll('.create-invoice');

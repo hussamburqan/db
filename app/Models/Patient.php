@@ -19,6 +19,10 @@ class Patient extends Model
     {
         return $this->belongsTo(User::class);
     }
+    public function archives()
+    {
+        return $this->hasMany(PatientArchive::class, 'patient_id');
+    }
 
     public function reservations()
     {

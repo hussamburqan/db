@@ -37,6 +37,24 @@ class DoctorController extends Controller
         ]);
     }
 
+    public function show1($id)
+    {
+        try {
+            $doctor = Doctor::with(['user', 'major', 'clinic'])->findOrFail($id);
+    
+            return response()->json([
+                'status' => true,
+                'data' => new DoctorResource($doctor)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+
     public function index(Request $request)
     {
         try {
@@ -203,41 +221,37 @@ class DoctorController extends Controller
     }
 
     public function update(Request $request, Doctor $doctor)
-    {
-        try {
-            $validated = $this->validateDoctor($request, true);
+{
+    try {
+        $validated = $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'address' => 'sometimes|required|string|max:255',
+            'specialization' => 'sometimes|required|string|max:255',
+            'experience_years' => 'sometimes|required|integer|min:0',
+            'education' => 'sometimes|required|string|max:255',
+            'start_work_time' => 'sometimes|required|date_format:H:i',
+            'end_work_time' => 'sometimes|required|date_format:H:i|after:start_work_time',
+            'default_time_reservations' => 'sometimes|required|integer|min:1',
+            'bio' => 'sometimes|required|string|max:1000',
+            'photo' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+        ]); 
 
-            if ($request->hasFile('photo')) {
-                if ($doctor->photo) {
-                    Storage::disk('public')->delete($doctor->photo);
-                }
-                $photoPath = $request->file('photo')->store('doctors', 'public');
-                $validated['photo'] = $photoPath;
-            }
-
-            $clinic = NClinic::find($validated['n_clinic_id']);
-            if ($validated['start_work_time'] < $clinic->opening_time || 
-                $validated['end_work_time'] > $clinic->closing_time) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'أوقات عمل الطبيب يجب أن تكون ضمن أوقات عمل العيادة'
-                ], 422);
-            }
-
-            $doctor->update($validated);
-
-            return response()->json([
-                'status' => true,
-                'message' => 'تم تحديث بيانات الطبيب بنجاح',
-                'data' => new DoctorResource($doctor)
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => $e->getMessage()
-            ], 500);
-        }
+        $doctor->update($validated);
+        
+        return response()->json([
+            'status' => true,
+            'message' => 'تم تحديث بيانات الطبيب بنجاح',
+            'data' => new DoctorResource($doctor->load(['user', 'major', 'clinic'])) 
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => $e->getMessage()
+        ], 500);
     }
+}
+
 
     public function destroy(Doctor $doctor)
     {

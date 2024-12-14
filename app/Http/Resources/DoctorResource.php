@@ -30,6 +30,12 @@ class DoctorResource extends JsonResource
                 'email' => $this->whenLoaded('user', function() {
                     return $this->user->email;
                 }),
+                'phone' => $this->whenLoaded('user', function() {
+                    return $this->user->phone;
+                }),
+                'address' => $this->whenLoaded('user', function() {
+                    return $this->user->address;
+                }),
             ],
             
             'major' => $this->whenLoaded('major', function() {

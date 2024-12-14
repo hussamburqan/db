@@ -4,10 +4,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\{
     UserController, MajorController, NClinicsController,
     DoctorController, PatientController, PatientArchiveController,
-    DiseaseController, InvoiceController, MedicalNewsController
+    DiseaseController, ReservationController, InvoiceController, MedicalNewsController
 };
-use App\Http\Controllers\ReservationController;
-
 
 Route::post('/register', [UserController::class, 'register']);
 Route::post('/login', [UserController::class, 'login']);
@@ -19,17 +17,13 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 Route::middleware('api')->group(function () {    
+    Route::get('/doctors/id/{id}', [DoctorController::class, 'show1']);
     Route::get('/reservations-slots', [ReservationController::class, 'getAvailableSlots']);
     Route::post('reservations/{reservation}/cancel', [ReservationController::class, 'cancel']);
     Route::get('/reservations/search', [ReservationController::class, 'search']);
+    Route::put('/reservations/{id}/status', [ReservationController::class, 'updateStatus']);
+
 });
-Route::middleware(['auth'])->group(function () {
-    Route::post('reservations/{reservation}/confirm', [ReservationController::class, 'confirm'])
-         ->name('reservations.confirm');
-    Route::post('reservations/{reservation}/reject', [ReservationController::class, 'reject'])
-         ->name('reservations.reject');
-});
-Route::post('/clinic/register', [ClinicAuthController::class, 'register']);
 
 Route::apiResources([
     'users' => UserController::class,

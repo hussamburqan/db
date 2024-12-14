@@ -108,8 +108,6 @@ class PatientController extends Controller
                'status' => true,
                'data' => new PatientResource($patient->load([
                    'user',
-                   'archives.doctor.user',
-                   'archives.doctor.clinic',
                    'diseases.doctor.user',
                    'reservations.doctor.user',
                    'reservations.clinic'

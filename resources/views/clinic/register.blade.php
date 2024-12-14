@@ -126,7 +126,7 @@
 </head>
 <body>
     <div class="container">
-        <img src="{{ asset('images/Logo.png') }}" alt="شعار العيادة" class="logo">
+        <img src="{{ asset('images/LogoB.png') }}" alt="شعار العيادة" class="logo">
         <h2>تسجيل حساب جديد للعيادة</h2>
 
         <?php if(session('success')): ?>

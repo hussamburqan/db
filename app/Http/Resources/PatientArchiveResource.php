@@ -37,15 +37,15 @@ class PatientArchiveResource extends JsonResource
                 'reason_for_visit' => $this->reservation->reason_for_visit,
                 'notes' => $this->reservation->notes,
             ] : null,
-            'patient' => $this->patient ? [
-                'id' => $this->patient->id,
-                'user' => $this->patient->user ? [
-                    'id' => $this->patient->user->id,
-                    'name' => $this->patient->user->name,
-                    'email' => $this->patient->user->email,
-                    'phone' => $this->patient->user->phone,
-                ] : null,
-            ] : null,
+            'patient' => [
+                'id' => $this->reservation->patient->id,
+                'user' => [
+                    'id' => $this->reservation->patient->user->id,
+                    'name' => $this->reservation->patient->user->name,
+                    'email' => $this->reservation->patient->user->email,
+                    'phone' => $this->reservation->patient->user->phone,
+                ] ,
+            ] ,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

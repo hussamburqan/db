@@ -2,15 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class PatientArchive extends Model
 {
-    use HasFactory;
 
     protected $fillable = [
-        'date', 'time', 'description', 'status', 'instructions', 'reservation_id', 'doctor_id'
+        'date', 'description', 'status', 'instructions', 'reservation_id', 'doctor_id'
     ];
 
     public function doctor()
@@ -20,8 +18,8 @@ class PatientArchive extends Model
 
     public function patient()
     {
-        return $this->belongsTo(Patient::class, 'reservation_id', 'id'); 
-    }
+        return $this->belongsTo(Patient::class);
+    }    
 
     public function reservation()
     {

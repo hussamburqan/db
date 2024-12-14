@@ -26,7 +26,6 @@ class PatientArchiveController extends Controller
     try {
         $query = PatientArchive::with(['doctor', 'reservation', 'reservation.patient.user']);
 
-        // إضافة شروط البحث
         if ($request->has('reservation_id')) {
             $query->where('reservation_id', $request->reservation_id);
         }
@@ -110,25 +109,31 @@ class PatientArchiveController extends Controller
     }
 }
 
-public function update(Request $request, PatientArchive $archive)
+public function update(Request $request, $archiveId)
 {
     try {
+        // First, check all existing archives
+        $existingArchives = PatientArchive::pluck('id');
+        \Log::info('Existing Archive IDs: ' . $existingArchives->implode(', '));
+
+        // Try to find the archive
+        $archive = PatientArchive::find($archiveId);
+
+        // If archive not found, log and return detailed error
         if (!$archive) {
+            \Log::error("Attempted to update non-existent archive with ID: $archiveId");
             return response()->json([
                 'status' => false,
-                'message' => 'السجل غير موجود'
+                'message' => 'السجل غير موجود',
+                'requested_id' => $archiveId,
+                'existing_ids' => $existingArchives->toArray()
             ], 404);
         }
 
-        if ($archive->status === 'completed') {
-            return response()->json([
-                'status' => false,
-                'message' => 'لا يمكن تحديث سجل مكتمل'
-            ], 422);
-        }
-
+        // Validate the request
         $validated = $this->validateArchive($request);
 
+        // Update the archive
         $archive->update($validated);
 
         return response()->json([
@@ -137,8 +142,9 @@ public function update(Request $request, PatientArchive $archive)
             'data' => new PatientArchiveResource($archive)
         ]);
     } catch (\Exception $e) {
-        // تسجيل الأخطاء
+        // Log the full error details
         \Log::error('Error updating archive: ' . $e->getMessage());
+        \Log::error('Error trace: ' . $e->getTraceAsString());
 
         return response()->json([
             'status' => false,
@@ -180,38 +186,4 @@ public function destroy(PatientArchive $archive)
         ], 500);
     }
 }
-
-    
-    public function getDoctorSchedule(Request $request)
-    {
-        try {
-            $request->validate([
-                'doctor_id' => 'required|exists:doctors,id',
-                'date' => 'required|date'
-            ]);
-
-            $doctor = Doctor::findOrFail($request->doctor_id);
-
-            $schedule = PatientArchive::where('doctor_id', $request->doctor_id)
-                ->where('date', $request->date)
-                ->orderBy('time')
-                ->get(['date', 'status']);
-
-            return response()->json([
-                'status' => true,
-                'data' => [
-                    'work_hours' => [
-                        'start' => $doctor->start_work_time,
-                        'end' => $doctor->end_work_time,
-                    ],
-                    'appointments' => $schedule
-                ]
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => $e->getMessage()
-            ], 500);
-        }
-    }
 }

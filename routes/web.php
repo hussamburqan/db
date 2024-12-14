@@ -38,12 +38,12 @@ Route::middleware(['auth'])->group(function () {
     })->name('logout');
 
     Route::prefix('reservations')->name('reservations.')->group(function () {
-        Route::post('{reservation}/confirm', [ReservationController::class, 'confirm'])
-            ->name('confirm');
+        Route::post('{reservation}/accepted', [ReservationController::class, 'accepted'])
+            ->name('accepted');
         Route::post('{reservation}/reject', [ReservationController::class, 'reject'])
             ->name('reject');
     });
-    Route::put('reservations/{reservation}/status', [ReservationController::class, 'updateStatus']);
+    Route::get('reservations/{reservation}/status', [ReservationController::class, 'updateStatus']);
     
     Route::resource('doctors', DoctorController::class);
 

@@ -150,7 +150,7 @@ class UserController extends Controller
         try {
             return response()->json([
                 'status' => true,
-                'data' => $user->load(['doctor', 'patient'])
+                'data' => $user->load(['doctor', 'patient','clinic'])
             ]);
         } catch (\Exception $e) {
             return response()->json([

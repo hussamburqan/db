@@ -27,12 +27,12 @@
         }
         .logo {
             object-fit: cover;
-
             display: block;
             margin: 0 auto 1rem;
             width: 120px;
             height: 120px;
             padding: 1px;
+
         }
         h2 {
             color: #1e3c72;
@@ -118,7 +118,7 @@
 </head>
 <body>
     <div class="container">
-    <img src="{{ asset('images/Logo.png') }}" alt="شعار العيادة" class="logo">
+    <img src="{{ asset('images/LogoB.png') }}" alt="شعار العيادة" class="logo">
         <h2>تسجيل الدخول للعيادة</h2>
 
         <?php if(session('success')): ?>

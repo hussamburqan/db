@@ -180,20 +180,19 @@ class ReservationController extends Controller
         ], 500);
     }
 }
-public function updateStatus(Request $request, Reservation $reservation)
+public function updateStatus(Request $request, $id)
 {
     try {
         $validated = $request->validate([
             'status' => 'required|in:pending,confirmed,cancelled'
         ]);
 
-        $reservation->update([
-            'status' => $validated['status']
-        ]);
+        $reservation = Reservation::findOrFail($id);
+        $reservation->update(['status' => $validated['status']]);
 
         return response()->json([
             'status' => true,
-            'message' => 'تم تحديث حالة الموعد بنجاح'
+            'message' => 'Reservation status updated successfully'
         ]);
 
     } catch (\Exception $e) {
@@ -203,6 +202,7 @@ public function updateStatus(Request $request, Reservation $reservation)
         ], 500);
     }
 }
+
 
     public function store(Request $request)
     {
@@ -285,41 +285,77 @@ public function updateStatus(Request $request, Reservation $reservation)
         }
     }
 
-    public function update(Request $request, Reservation $reservation)
-    {
-        try {
-            if ($reservation->status === 'cancelled') {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Cannot modify cancelled reservation'
-                ], 422);
-            }
+    public function updatePatientArchive(Request $request, $archiveId)
+{
+    try {
+        // Validate the incoming request
+        $validatedData = $request->validate([
+            'reservation_id' => 'required|exists:reservations,id',
+            'patient_id' => 'required|exists:patients,id',
+            'doctor_id' => 'required|exists:doctors,id',
+            'description' => 'required|string',
+            'instructions' => 'required|string',
+            'status' => 'required|in:completed,pending,cancelled'
+        ]);
 
-            DB::beginTransaction();
+        // Find the existing archive
+        $patientArchive = PatientArchive::findOrFail($archiveId);
 
-            $validated = $this->validateReservation($request);
-            $reservation->update($validated);
-
-            DB::commit();
-
-            return response()->json([
-                'status' => true,
-                'message' => 'Reservation updated successfully',
-                'data' => new ReservationResource($reservation)
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
+        // Optional: Verify reservation belongs to the patient
+        $reservation = Reservation::findOrFail($validatedData['reservation_id']);
+        if ($reservation->patient_id !== $validatedData['patient_id']) {
             return response()->json([
                 'status' => false,
-                'message' => $e->getMessage()
-            ], 500);
+                'message' => 'Reservation does not belong to the specified patient'
+            ], 400);
         }
+
+        // Update the patient archive
+        $patientArchive->update([
+            'reservation_id' => $validatedData['reservation_id'],
+            'patient_id' => $validatedData['patient_id'],
+            'doctor_id' => $validatedData['doctor_id'],
+            'description' => $validatedData['description'],
+            'instructions' => $validatedData['instructions'],
+            'status' => $validatedData['status'],
+            'date' => now()
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Patient archive updated successfully',
+            'data' => $patientArchive
+        ]);
+
+    } catch (ValidationException $e) {
+        // Handle validation errors
+        return response()->json([
+            'status' => false,
+            'message' => 'Validation error',
+            'errors' => $e->errors()
+        ], 422);
+
+    } catch (ModelNotFoundException $e) {
+        // Handle not found errors
+        return response()->json([
+            'status' => false,
+            'message' => 'Patient archive or related record not found'
+        ], 404);
+
+    } catch (\Exception $e) {
+        // Catch any other unexpected errors
+        return response()->json([
+            'status' => false,
+            'message' => 'Error updating patient archive: ' . $e->getMessage()
+        ], 500);
     }
-    public function confirm(Reservation $reservation)
+}
+
+
+    public function accepted(Reservation $reservation)
     {
         try {
-            $reservation->update(['status' => 'confirmed']);
+            $reservation->update(['status' => 'accepted']);
 
             return back()->with('success', 'تم تأكيد الموعد بنجاح');
         } catch (\Exception $e) {
